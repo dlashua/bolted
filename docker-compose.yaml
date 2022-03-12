@@ -5,7 +5,7 @@ services:
     image: "homeassistant/home-assistant:stable"
     volumes:
       - ./home-assistant:/config
-      - ./custom_components/hass_modules:/config/custom_components/hass_modules
+      - ./custom_components/bolted:/config/custom_components/bolted
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     ports:

@@ -1,5 +1,5 @@
 """
-Manager for HASS Modules
+Manager for Bolted
 """
 import logging
 from homeassistant.core import HomeAssistant
@@ -48,8 +48,8 @@ class Manager():
     async def reload(self):
         _LOGGER.debug("@reload")
         reloaded_apps = await self.refresh_available_apps()
-        hass_modules_config = await self.get_component_config()
-        apps_config = hass_modules_config.get('apps', {})
+        bolted = await self.get_component_config()
+        apps_config = bolted.get('apps', {})
 
         apps_to_load = {}
         for app_instance_name in apps_config:
@@ -116,8 +116,8 @@ class Manager():
 
         await self.refresh_available_apps()
 
-        hass_modules_config = await self.get_component_config()
-        apps_config = hass_modules_config.get('apps', {})
+        bolted = await self.get_component_config()
+        apps_config = bolted.get('apps', {})
 
         for app_instance_name in apps_config:
             app_config = apps_config[app_instance_name]
@@ -177,9 +177,9 @@ class Manager():
             self.hass, hass_config_raw, await async_get_integration(self.hass, DOMAIN)
         )
 
-        hass_modules_config = hass_config[DOMAIN]
+        bolted = hass_config[DOMAIN]
 
-        return hass_modules_config
+        return bolted
 
 class EventHandler(PatternMatchingEventHandler):
     """Class for handling Watcher events."""

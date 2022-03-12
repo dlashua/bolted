@@ -1,8 +1,8 @@
 """
-Custom integration for HASS Modules
+Custom integration for Bolted
 
 For more details about this integration, please refer to
-https://github.com/dlashua/hass-modules
+https://github.com/dlashua/bolted
 """
 import logging
 from homeassistant.core import HomeAssistant

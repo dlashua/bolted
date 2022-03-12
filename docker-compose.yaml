@@ -1,0 +1,12 @@
+version: '3'
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: "homeassistant/home-assistant:stable"
+    volumes:
+      - ./home-assistant:/config
+      - ./custom_components/hass_modules:/config/custom_components/hass_modules
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    ports:
+      - 8123:8123

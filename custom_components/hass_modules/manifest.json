@@ -1,0 +1,12 @@
+{
+    "domain": "hass_modules",
+    "name": "Hass Modules",
+    "documentation": "https://github.com/dlashua/hass-modules",
+    "iot_class": "local_push",
+    "issue_tracker": "https://github.com/dlashua/hass-modules/issues",
+    "version": "0.0.1",
+    "config_flow": false,
+    "codeowners": [
+      "@dlashua"
+    ]
+  }

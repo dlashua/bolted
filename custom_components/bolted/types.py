@@ -1,4 +1,3 @@
-from ast import Add
 import logging
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.core import callback
@@ -12,55 +11,44 @@ import abc
 from homeassistant.core import HomeAssistant
 from functools import partial
 import inspect
+from homeassistant.loader import IntegrationNotFound, async_get_integration
+import voluptuous as vol
+from homeassistant.helpers.event import (
+    TrackTemplate,
+    async_call_later,
+    async_track_template_result,
+)
+from homeassistant.helpers.template import Template
+from functools import wraps
+from .entity_manager import EntityManager
 
-LISTEN_STATE_DEC = {}
+
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-class AddDecorators(abc.ABCMeta):
-    insta_id = 0
 
-    @classmethod
-    def __prepare__(metaclass, basename, extends, *args, **kwargs):
-        my_id = metaclass.insta_id
-        metaclass.insta_id = metaclass.insta_id + 1
+def match_sig(func):
+    func_params = []
+    func_signature = inspect.signature(func)
+    for param in func_signature.parameters:
+        func_params.append(param)
 
-        super().__prepare__(basename, extends, *args, **kwargs)
-        _LOGGER.debug('PREPARE bn: %s, e: %s, %s %s', basename, extends, args, kwargs)
-        def d_listen_state(entity_id):
-            def inner(f):
-                if my_id not in LISTEN_STATE_DEC:
-                    LISTEN_STATE_DEC[my_id] = []
-                LISTEN_STATE_DEC[my_id].append({
-                    'entity_id': entity_id,
-                    'func': f
-                })
-                return f
+    @wraps(func)
+    def inner_match_sig(**kwargs):
+        kwargs_to_send = {}
+        for key in func_params:
+            kwargs_to_send[key] = kwargs[key]
 
-            return inner
+        return func(**kwargs_to_send)
 
-        return {"d_listen_state": d_listen_state, "_LISTEN_ID": my_id}
-
-    # def __new__(mcs, name, bases, attrs, **kwargs):
-    #     x = ('  Meta.__new__(mcs=%s, name=%r, bases=%s, attrs=[%s], **%s)' % (
-    #         mcs, name, bases, ', '.join(attrs), kwargs
-    #     ))
-    #     _LOGGER.debug(x)
-    #     def d_listen_state(entity_id):
-    #         def inner(f):
-    #             _LOGGER.debug('here')
-    #             return f
-
-    #         return inner
-
-
-    #     obj = super().__new__(mcs, name, bases, attrs)
-    #     setattr(obj, "d_listen_state", d_listen_state)
-    #     _LOGGER.debug('obj %s', obj)
-    #     return obj
-
+    return inner_match_sig
     
-
-
+def make_cb_decorator(orig_func):
+    def inner_cb_decorator(*args, **kwargs):
+        @wraps(orig_func)
+        def inner_cb_decorator_func(func):
+            return orig_func(cb=func, *args, **kwargs)
+        return inner_cb_decorator_func
+    return inner_cb_decorator
 class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def __init__(self, hass: HomeAssistant, name, config):
@@ -71,45 +59,80 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
 
+        # self._template_trigger_platform = None
+
         if self.hass.is_running:
             self.hass.add_job(self._startup)
         else:
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, self._startup)
 
-        # self.setattr(self, 'listen_state', self.listen_state)
+    def get_entity(self, platform, name):
+        unique_name = f'{self.__class__.__module__}::{self.name}'
+        return EntityManager.get(platform, unique_name)
 
     async def _startup(self, _ = None):
+        # try:
+        #     integration = await async_get_integration(self.hass, 'template')
+        # except IntegrationNotFound:
+        #     raise vol.Invalid(f"Invalid platform 'template' specified") from None
+        # try:
+        #     self._template_trigger_platform = integration.get_platform("trigger")
+        # except ImportError:
+        #     raise vol.Invalid(
+        #         f"Integration 'template' does not provide trigger support"
+        #     ) from None
+
         self.startup()
 
-    def listen_state(self, entity_id, cb=None):
-        def inner_listen_state(cb):
-            cb_params = []
-            cb_signature = inspect.signature(cb)
-            for param in cb_signature.parameters:
-                cb_params.append(param)
+    def listen_template(self, value_template, cb):
+        matched_cb = match_sig(cb)
 
-            @callback
-            def inner_cb(event):
-                self.logger.debug('listen_state event: %s', event)
-                avail_kwargs = dict(
-                    entity_id=event.data['entity_id'],
-                    new_state=event.data['new_state'],
-                    old_state=event.data['old_state']
-                )
+        @callback
+        @wraps(cb)
+        def inner_cb(event, template_result):
+            _LOGGER.debug('listen_template template=%s, event=%s, template_result=%s', value_template, event, template_result)
+            kwargs = dict(
+                event=event,
+                result=template_result[0].result,
+                last_result=template_result[0].last_result
+            )
 
-                kwargs = {}
-                for key in cb_params:
-                    kwargs[key] = avail_kwargs[key]
+            matched_cb(**kwargs)
 
-                cb(**kwargs)
+        _LOGGER.debug('hass is %s', self.hass)
+        info = async_track_template_result(
+            self.hass,
+            [TrackTemplate(Template(value_template, self.hass), None)],
+            inner_cb,
+        )
 
-            handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
-            self.listeners.append(handle)
+        self.listeners.append(info.async_remove)
+
+        return info.async_remove
+
+    listen_template_func = make_cb_decorator(listen_template)
+
+    def listen_state(self, entity_id, cb):
+        matched_cb = match_sig(cb)
+
+        @callback
+        @wraps(cb)
+        def inner_cb(event):
+            self.logger.debug('listen_state event: %s', event)
+            kwargs = dict(
+                entity_id=event.data['entity_id'],
+                new_state=event.data['new_state'],
+                old_state=event.data['old_state']
+            )
+
+            matched_cb(**kwargs)
+
+        handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
+        self.listeners.append(handle)
         
-        if cb is None:
-            return inner_listen_state
-        
-        return inner_listen_state(cb)
+        return handle
+
+    listen_state_func = make_cb_decorator(listen_state)
 
     def call_service(self, domain, service, **kwargs):
         self.hass.async_create_task(
@@ -140,8 +163,6 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def __del__(self):
         return self.shutdown()
-
-
 
     ###### TO OVERRIDE
     @abc.abstractmethod

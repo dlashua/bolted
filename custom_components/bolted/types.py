@@ -1,4 +1,5 @@
 import logging
+from types import coroutine
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.core import callback
 from homeassistant.const import (
@@ -14,6 +15,9 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.template import Template
 from functools import wraps
 from .entity_manager import EntityManager
+import asyncio
+import pendulum
+import datetime
 
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
@@ -115,6 +119,33 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     listen_state_func = make_cb_decorator(listen_state)
 
+    def run_in(self, seconds, cb, *args, **kwargs):
+        async def inner_run_in():
+            await asyncio.sleep(seconds)
+            if asyncio.iscoroutine(cb):
+                await cb
+            elif asyncio.iscoroutinefunction(cb):
+                await cb(*args, **kwargs)
+            else:
+                cb(*args, **kwargs)
+
+        return self.add_job(inner_run_in())
+
+    def run_at(self, time, cb, *args, **kwargs):
+        now = pendulum.now()
+        if isinstance(time, str):
+            fut = pendulum.parse(time, tz=now.tz)
+        elif isinstance(time, datetime.time):
+            fut = pendulum.parse(str(time), tz=now.tz)
+        
+        seconds = (fut - now).in_seconds()
+
+        if seconds <= 0:
+            fut = fut.add(hours=24)
+            seconds = (fut - now).in_seconds()
+
+        return self.run_in(seconds, cb, *args, **kwargs)
+
     def call_service(self, domain, service, **kwargs):
         self.hass.async_create_task(
             self.hass.services.async_call(domain, service, kwargs)
@@ -135,6 +166,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
         self.listeners.append(cancel_add_job)
 
+        return cancel_add_job
 
     def shutdown(self):
         while self.listeners:

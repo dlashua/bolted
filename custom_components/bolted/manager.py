@@ -49,21 +49,39 @@ class Manager():
         apps_config = bolted.get('apps', {})
         if apps_config is not None:
             apps_to_load = {}
-            for app_instance_name in apps_config:
-                app_config = apps_config[app_instance_name]
-                if app_instance_name not in self.loaded_app_instances:
-                    apps_to_load[app_instance_name] = app_config
+            seen = []
+            for app_config in apps_config:
+                try:
+                    app_name = app_config['app']
+                    app_instance_name = app_config['name']
+                except:
+                    _LOGGER.warn("Required Keys (app, name) not present in config %s", app_config)
                     continue
 
-                if app_config != self.loaded_app_instances[app_instance_name]['config']:
-                    await self.stop_app(app_instance_name)
-                    apps_to_load[app_instance_name] = app_config
+                if app_instance_name in seen:
+                    _LOGGER.warn("Multiple Apps share the same name: %s", app_instance_name)
                     continue
 
-                if app_config['app'] in reloaded_apps:
+                seen.append(app_instance_name)
+
+                if app_name in reloaded_apps:
                     await self.stop_app(app_instance_name)
-                    apps_to_load[app_instance_name] = app_config
-                    continue                   
+
+                if app_instance_name in self.loaded_app_instances:
+                    if app_config != self.loaded_app_instances[app_instance_name]['config']:
+                        await self.stop_app(app_instance_name)
+                    else:
+                        continue
+
+                apps_to_load[app_instance_name] = app_config
+
+            app_instances_to_remove = []
+            for app_instance_name in self.loaded_app_instances:
+                if app_instance_name not in seen:
+                    app_instances_to_remove.append(app_instance_name)
+
+            for app_instance_name in app_instances_to_remove:
+                    await self.stop_app(app_instance_name)
 
             for app_instance_name in apps_to_load:
                 app_config = apps_to_load[app_instance_name]
@@ -77,9 +95,13 @@ class Manager():
             _LOGGER.debug("walking %s", dirpath)
             for this_file in filenames:
                 if this_file[-3:] == '.py':
-                    app_name = this_file[0:-3]
-                    app_name = app_name.replace('/','.')
+                    module_path = dirpath[len(modules_path)+1:]
                     app_path = dirpath + '/' + this_file
+                    app_name = this_file[0:-3]
+                    if len(module_path) != 0:
+                        app_name = module_path + '/' + app_name
+                    app_name = app_name.replace('/','.')
+                    _LOGGER.debug('file: %s, app_path: %s, app_name: %s', this_file, app_path, app_name)
                     available_apps[app_name] = app_path
                     available_apps_mtime[app_name] = os.path.getmtime(app_path)
 
@@ -111,14 +133,7 @@ class Manager():
     async def start(self) -> bool:
         _LOGGER.debug("@start")
 
-        await self.refresh_available_apps()
-
-        bolted = await self.get_component_config()
-        apps_config = bolted.get('apps', {})
-        if apps_config is not None:
-            for app_instance_name in apps_config:
-                app_config = apps_config[app_instance_name]
-                self.start_app(app_instance_name, app_config)
+        await self.reload()
 
         def reload_action():
             self.hass.add_job(self.reload)

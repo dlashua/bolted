@@ -50,27 +50,27 @@ class Manager():
         reloaded_apps = await self.refresh_available_apps()
         bolted = await self.get_component_config()
         apps_config = bolted.get('apps', {})
+        if apps_config is not None:
+            apps_to_load = {}
+            for app_instance_name in apps_config:
+                app_config = apps_config[app_instance_name]
+                if app_instance_name not in self.loaded_app_instances:
+                    apps_to_load[app_instance_name] = app_config
+                    continue
 
-        apps_to_load = {}
-        for app_instance_name in apps_config:
-            app_config = apps_config[app_instance_name]
-            if app_instance_name not in self.loaded_app_instances:
-                apps_to_load[app_instance_name] = app_config
-                continue
+                if app_config != self.loaded_app_instances[app_instance_name]['config']:
+                    await self.stop_app(app_instance_name)
+                    apps_to_load[app_instance_name] = app_config
+                    continue
 
-            if app_config != self.loaded_app_instances[app_instance_name]['config']:
-                await self.stop_app(app_instance_name)
-                apps_to_load[app_instance_name] = app_config
-                continue
+                if app_config['app'] in reloaded_apps:
+                    await self.stop_app(app_instance_name)
+                    apps_to_load[app_instance_name] = app_config
+                    continue                   
 
-            if app_config['app'] in reloaded_apps:
-                await self.stop_app(app_instance_name)
-                apps_to_load[app_instance_name] = app_config
-                continue                   
-
-        for app_instance_name in apps_to_load:
-            app_config = apps_to_load[app_instance_name]
-            self.start_app(app_instance_name, app_config)
+            for app_instance_name in apps_to_load:
+                app_config = apps_to_load[app_instance_name]
+                self.start_app(app_instance_name, app_config)
 
     async def refresh_available_apps(self):
         available_apps = {}
@@ -118,15 +118,15 @@ class Manager():
 
         bolted = await self.get_component_config()
         apps_config = bolted.get('apps', {})
-
-        for app_instance_name in apps_config:
-            app_config = apps_config[app_instance_name]
-            self.start_app(app_instance_name, app_config)
+        if apps_config is not None:
+            for app_instance_name in apps_config:
+                app_config = apps_config[app_instance_name]
+                self.start_app(app_instance_name, app_config)
 
         def reload_action():
             self.hass.add_job(self.reload)
 
-        event_handler = EventHandler(['*.py'], reload_action)
+        event_handler = EventHandler(['*.py', '*.yaml'], reload_action)
         self._observer = Observer()
         self._observer.schedule(event_handler, self.hass.config.path(FOLDER), recursive=True)
         self._observer.start()
@@ -153,13 +153,16 @@ class Manager():
             this_module_spec.loader.exec_module(self.loaded_app_modules[app_name])
             _LOGGER.debug('Loaded Module %s', app_name)
 
-        this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config)
-        _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
-        self.loaded_app_instances[app_instance_name] = {
-            "config": app_config,
-            "module": app_name,
-            "obj": this_obj
-        }
+        try:
+            this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config)
+            _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
+            self.loaded_app_instances[app_instance_name] = {
+                "config": app_config,
+                "module": app_name,
+                "obj": this_obj
+            }
+        except AttributeError:
+            _LOGGER.error("%s doesn't have a Module class", app_name)
 
         return True
 

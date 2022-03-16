@@ -67,8 +67,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, self._startup)
 
     def get_entity(self, platform, name):
-        unique_name = f'{self.__class__.__module__}::{self.name}'
-        return EntityManager.get(platform, unique_name)
+        return EntityManager.get(self, platform, name)
 
     async def _startup(self, _ = None):
         # try:

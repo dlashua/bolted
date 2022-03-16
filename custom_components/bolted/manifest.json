@@ -8,5 +8,9 @@
     "config_flow": false,
     "codeowners": [
       "@dlashua"
+    ],
+    "requirements": [
+      "watchdog",
+      "pendulum"
     ]
   }

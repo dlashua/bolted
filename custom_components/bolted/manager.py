@@ -7,10 +7,7 @@ from homeassistant import config as conf_util
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
 import os
-import sys
 import importlib.util
-from typing import Optional
-from importlib import reload
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 

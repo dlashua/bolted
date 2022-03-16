@@ -2,7 +2,7 @@
 from homeassistant.helpers.entity import Entity
 import logging
 from typing import Optional, Any
-from collections.abc import Awaitable, Iterable, Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -85,10 +85,7 @@ class BoltedEntity(Entity):
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
-        """Return entity specific state attributes.
-        Implemented by platform classes. Convention for attribute names
-        is lowercase snake_case.
-        """
+        """Return entity specific state attributes."""
         attrs = {}
         if hasattr(self, "_attr_extra_state_attributes"):
             attrs.update(self._attr_extra_state_attributes)

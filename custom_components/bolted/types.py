@@ -4,18 +4,11 @@ from homeassistant.core import callback
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_START,
 )
-from .const import (
-    DOMAIN
-)
 import abc
 from homeassistant.core import HomeAssistant
-from functools import partial
 import inspect
-from homeassistant.loader import IntegrationNotFound, async_get_integration
-import voluptuous as vol
 from homeassistant.helpers.event import (
     TrackTemplate,
-    async_call_later,
     async_track_template_result,
 )
 from homeassistant.helpers.template import Template
@@ -49,6 +42,8 @@ def make_cb_decorator(orig_func):
             return orig_func(cb=func, *args, **kwargs)
         return inner_cb_decorator_func
     return inner_cb_decorator
+
+
 class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def __init__(self, hass: HomeAssistant, name, config):
@@ -59,8 +54,6 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
 
-        # self._template_trigger_platform = None
-
         if self.hass.is_running:
             self.hass.add_job(self._startup)
         else:
@@ -70,17 +63,6 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         return EntityManager.get(self, platform, name)
 
     async def _startup(self, _ = None):
-        # try:
-        #     integration = await async_get_integration(self.hass, 'template')
-        # except IntegrationNotFound:
-        #     raise vol.Invalid(f"Invalid platform 'template' specified") from None
-        # try:
-        #     self._template_trigger_platform = integration.get_platform("trigger")
-        # except ImportError:
-        #     raise vol.Invalid(
-        #         f"Integration 'template' does not provide trigger support"
-        #     ) from None
-
         self.startup()
 
     def listen_template(self, value_template, cb):

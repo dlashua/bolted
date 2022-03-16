@@ -6,7 +6,6 @@ https://github.com/dlashua/bolted
 """
 import logging
 from homeassistant.core import HomeAssistant
-from homeassistant.loader import async_get_integration
 from .manager import Manager
 from .entity_manager import EntityManager
 
@@ -15,12 +14,8 @@ from .const import (
     SERVICE_RELOAD,
 )
 
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-
 from homeassistant.helpers import (
     discovery,
-    trigger as trigger_helper,
-    update_coordinator,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)

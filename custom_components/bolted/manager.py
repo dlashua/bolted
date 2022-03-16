@@ -103,7 +103,7 @@ class Manager():
                     if len(module_path) != 0:
                         app_name = module_path + '/' + app_name
                     app_name = app_name.replace('/','.')
-                    _LOGGER.debug('file: %s, app_path: %s, app_name: %s', this_file, app_path, app_name)
+                    _LOGGER.debug('Found App app_name: %s, app_path: %s', app_name, app_path)
                     available_apps[app_name] = app_path
                     available_apps_mtime[app_name] = os.path.getmtime(app_path)
 

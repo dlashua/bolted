@@ -33,7 +33,11 @@ def match_sig(func):
     def inner_match_sig(**kwargs):
         kwargs_to_send = {}
         for key in func_params:
-            kwargs_to_send[key] = kwargs[key]
+            if key in kwargs:
+                kwargs_to_send[key] = kwargs[key]
+            else:
+                _LOGGER.warn('unknown argument %s in %s', key, func)
+                kwargs_to_send[key] = None
 
         return func(**kwargs_to_send)
 
@@ -118,6 +122,27 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         return handle
 
     listen_state_func = make_cb_decorator(listen_state)
+
+    def listen_event(self, event_type, cb):
+        matched_cb = match_sig(cb)
+
+        @callback
+        @wraps(cb)
+        def inner_cb(event):
+            self.logger.debug('listen_event event: %s', event)
+            kwargs = dict(
+                event_type=event.event_type,
+                event_data=event.data,
+            )
+
+            matched_cb(**kwargs)
+    
+        handle = self.hass.bus.async_listen(event_type, inner_cb)
+        self.listeners.append(handle)
+
+        return handle
+
+    listen_event_func = make_cb_decorator(listen_event)
 
     def run_in(self, seconds, cb, *args, **kwargs):
         async def inner_run_in():

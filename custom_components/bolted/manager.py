@@ -94,6 +94,8 @@ class Manager():
         for (dirpath, dirnames, filenames) in os.walk(modules_path):
             _LOGGER.debug("walking %s", dirpath)
             for this_file in filenames:
+                if this_file[0] == "#":
+                    continue
                 if this_file[-3:] == '.py':
                     module_path = dirpath[len(modules_path)+1:]
                     app_path = dirpath + '/' + this_file

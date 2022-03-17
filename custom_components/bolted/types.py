@@ -22,6 +22,23 @@ import datetime
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
+def recursive_match(search, source):
+    if isinstance(search, dict):
+        if not isinstance(source, dict):
+            return False
+        
+        for key in search:
+            if key not in source:
+                return False
+            if not recursive_match(search[key], source[key]):
+                return False
+
+    else:
+        if search != source:
+            return False
+
+    return True    
+    
 
 def match_sig(func):
     func_params = []
@@ -123,13 +140,15 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     listen_state_func = make_cb_decorator(listen_state)
 
-    def listen_event(self, event_type, cb):
+    def listen_event(self, event_type, cb, filter={}):
         matched_cb = match_sig(cb)
 
         @callback
         @wraps(cb)
         def inner_cb(event):
             self.logger.debug('listen_event event: %s', event)
+            if not recursive_match(filter, event.data):
+                return
             kwargs = dict(
                 event_type=event.event_type,
                 event_data=event.data,

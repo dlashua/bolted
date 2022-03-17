@@ -163,6 +163,9 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     listen_event_func = make_cb_decorator(listen_event)
 
+    def fire_event(self, event_type, data={}):
+        self.hass.bus.fire(event_type, data)
+
     def run_in(self, seconds, cb, *args, **kwargs):
         async def inner_run_in():
             await asyncio.sleep(seconds)

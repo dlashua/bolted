@@ -34,21 +34,21 @@ class EntityManager:
         cls.registered_entities[platform] = {}
 
     @classmethod
-    async def get(cls, bolted, platform, name, **kwargs):
+    async def get(cls, bolted, platform, name, restore=False):
         unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
         """Get an Entity from Bolted"""
         await cls.wait_platform_registered(platform)
         if platform not in cls.registered_entities or unique_id not in cls.registered_entities[platform]:
-            await cls.create(bolted, platform, unique_id, **kwargs)
+            await cls.create(bolted, platform, unique_id, restore=restore)
         
         return cls.registered_entities[platform][unique_id]
 
     @classmethod
-    async def create(cls, bolted, platform, unique_id, **kwargs):
+    async def create(cls, bolted, platform, unique_id, restore=False):
         """Create entity from Bolted."""
         await cls.wait_platform_registered(platform)
         _LOGGER.debug('Created New Entity %s %s', platform, unique_id)
-        new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id, **kwargs)
+        new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id, restore=restore)
         cls.platform_adders[platform]([new_entity])
         await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity
@@ -75,7 +75,6 @@ class BoltedEntity(RestoreEntity):
         self.hass = hass
         self.bolted = bolted
         self._added = ObservableVariable(False)
-        self._ready_handler = None
         self._should_restore = restore
 
         self._attr_unique_id = unique_id

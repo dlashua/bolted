@@ -68,6 +68,11 @@ def make_cb_decorator(orig_func):
         return inner_cb_decorator_func
     return inner_cb_decorator
 
+async def call_or_await(cb, *args, **kwargs):
+    if asyncio.iscoroutinefunction(cb):
+        await cb(*args, **kwargs)
+    else:
+        cb(*args, **kwargs)
 
 class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
@@ -78,17 +83,36 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         self._logging_name = f'{__package__}.{self._get_logger_name()}.{self.__module__}.{self.name}'
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
-
+        self.automation_switch = None
+        
         if self.hass.is_running:
             self.hass.add_job(self._startup)
         else:
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, self._startup)
 
-    def get_entity(self, platform, name):
-        return EntityManager.get(self, platform, name)
+    async def get_entity(self, platform, name, **kwargs):
+        return await EntityManager.get(self, platform, name, **kwargs)
 
     async def _startup(self, _ = None):
-        self.startup()
+        self.automation_switch = await self.get_entity('switch', 'automation', restore=True)
+        self.logger.debug('Automation Switch Entity Created %s', self.name)
+        async def turn_on(*args, **kwargs):
+            await call_or_await(self.startup)
+            self.automation_switch.set(True)
+        async def turn_off(*args, **kwargs):
+            self.shutdown()
+            self.automation_switch.set(False)
+
+        self.automation_switch.on_turn_on(turn_on)
+        self.automation_switch.on_turn_off(turn_off)
+
+        self.logger.debug('Automation Switch for %s is %s', self.name, self.automation_switch.is_on)
+        self.logger.debug('Automation Switch State for %s is %s', self.name, self.automation_switch.state)
+        if self.automation_switch.is_on is not False:
+            await turn_on()
+        else:
+            await turn_off()
+
 
     def listen_template(self, value_template, cb):
         matched_cb = match_sig(cb)
@@ -169,12 +193,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
     def run_in(self, seconds, cb, *args, **kwargs):
         async def inner_run_in():
             await asyncio.sleep(seconds)
-            if asyncio.iscoroutine(cb):
-                await cb
-            elif asyncio.iscoroutinefunction(cb):
-                await cb(*args, **kwargs)
-            else:
-                cb(*args, **kwargs)
+            await call_or_await(cb, *args, **kwargs)
 
         return self.add_job(inner_run_in())
 

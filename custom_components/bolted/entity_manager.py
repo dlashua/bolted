@@ -1,8 +1,9 @@
 """Bolted Entity Manager"""
-from homeassistant.helpers.entity import Entity
 import logging
 from typing import Optional, Any
 from collections.abc import Mapping, MutableMapping
+from homeassistant.helpers.restore_state import RestoreEntity
+from .helpers import ObservableVariable
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -32,44 +33,48 @@ class EntityManager:
         cls.registered_entities[platform] = {}
 
     @classmethod
-    def get(cls, bolted, platform, name):
+    async def get(cls, bolted, platform, name, **kwargs):
         unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
         """Get an Entity from Bolted"""
-        cls.wait_platform_registered(platform)
+        await cls.wait_platform_registered(platform)
         if platform not in cls.registered_entities or unique_id not in cls.registered_entities[platform]:
-            cls.create(bolted, platform, unique_id)
-
+            await cls.create(bolted, platform, unique_id, **kwargs)
+        
         return cls.registered_entities[platform][unique_id]
 
     @classmethod
-    def create(cls, bolted, platform, unique_id):
+    async def create(cls, bolted, platform, unique_id, **kwargs):
         """Create entity from Bolted."""
-        cls.wait_platform_registered(platform)
-        new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id)
+        await cls.wait_platform_registered(platform)
+        _LOGGER.debug('Created New Entity %s %s', platform, unique_id)
+        new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id, **kwargs)
         cls.platform_adders[platform]([new_entity])
+        await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity
 
     @classmethod
-    def wait_platform_registered(cls, platform):
+    async def wait_platform_registered(cls, platform):
         """Wait for platform registration."""
         if platform not in cls.platform_classes:
-            raise KeyError(f"Platform {platform} not registered.")
+            raise KeyError(f'Platform {platform} not registered.')
 
         return True
 
 
-class BoltedEntity(Entity):
+class BoltedEntity(RestoreEntity):
     """Base Class for all Bolted Entities"""
-    _added = False
 
     _attr_unique_id: Optional[str] = None
     _attr_should_poll = False
     _attr_extra_state_attributes: MutableMapping[str, Any]
     _attr_bolted_state_attributes: MutableMapping[str, Any]
 
-    def __init__(self, hass, bolted, unique_id):
+    def __init__(self, hass, bolted, unique_id, restore=False):
         self.hass = hass
         self.bolted = bolted
+        self._added = ObservableVariable(False)
+        self._ready_handler = None
+        self._should_restore = restore
 
         self._attr_unique_id = unique_id
 
@@ -83,6 +88,11 @@ class BoltedEntity(Entity):
             self.unique_id,
         )
 
+    async def wait_for_added(self):
+        while self._added.value is not True:
+            _LOGGER.debug('Waiting for Entity to be added %s', self.unique_id)
+            await self._added.wait()
+        
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         """Return entity specific state attributes."""
@@ -95,8 +105,19 @@ class BoltedEntity(Entity):
 
     async def async_added_to_hass(self):
         """Called when Home Assistant adds the entity to the registry""" 
-        self._added = True   
+        await super().async_added_to_hass()
+
+        if self._should_restore:
+            last_data = await self.async_get_last_extra_data()
+            self.bolted.logger.debug("Last Data %s: %s", self.unique_id, last_data)
+            if last_data is not None:
+                for key, value in last_data.as_dict().items():
+                    self.bolted.logger.debug('Restore %s = %s value', key, value)
+                    setattr(self, key, value)
+
+        self._added.value = True   
         self.async_update()
+
         _LOGGER.debug(
             "Entity %s Added to Hass as %s",
             self.unique_id,

@@ -2,6 +2,8 @@
 from .entity_manager import EntityManager, BoltedEntity
 from homeassistant.helpers.entity import ToggleEntity
 from typing import Optional
+from .types import call_or_await
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoredExtraData
 
 PLATFORM = "switch"
 
@@ -23,13 +25,14 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
     _attr_is_on: Optional[bool] = None
     _attr_extra_state_attributes: dict = {}
 
+
     async def async_turn_on(self, **kwargs):
         """Handle turn_on request."""
         if self._turn_on_handler is None:
             return
 
         if callable(self._turn_on_handler):
-            self._turn_on_handler(self, **kwargs)
+            await call_or_await(self._turn_on_handler, **kwargs)
         else:
             raise RuntimeError(f"Unable to Call turn_on_handler of type {type(self._turn_on_handler)}")
 
@@ -39,9 +42,20 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
             return
 
         if callable(self._turn_off_handler):
-            self._turn_off_handler(self, **kwargs)
+            await call_or_await(self._turn_off_handler, **kwargs)
         else:
             raise RuntimeError(f"Unable to Call turn_off_handler of type {type(self._turn_off_handler)}")
+
+    @property
+    def extra_restore_state_data(self) -> Optional[ExtraStoredData]:
+        """Return entity specific state data to be restored.
+        Implemented by platform classes.
+        """
+        self.bolted.logger.debug('extra_restore_state_data called on %s', self.entity_id)
+        return RestoredExtraData({
+            '_attr_is_on': self._attr_is_on,
+            '_attr_extra_state_attributes': self._attr_extra_state_attributes,
+        })
 
     # USED IN BOLTED APPS
     ######################################

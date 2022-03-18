@@ -21,7 +21,12 @@ class BoltedBinarySensor(BoltedEntity, BinarySensorEntity):
     
     _attr_is_on: Optional[bool] = None
     _attr_extra_state_attributes: dict = {}
-
+    _attr_device_class: Optional[str] = None
+    _restorable_attributes = [
+        '_attr_is_on',
+        '_attr_extra_state_attributes',
+        '_attr_device_class',
+    ]
 
     # USED IN BOLTED APPS
     ######################################

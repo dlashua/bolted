@@ -22,6 +22,14 @@ class BoltedSensor(BoltedEntity, SensorEntity):
     _attr_native_value: Optional[str] = None
     _attr_extra_state_attributes: dict = {}
     _attr_native_unit_of_measurement: Optional[str] = None
+    _attr_device_class: Optional[str] = None
+    _restorable_attributes = [
+        '_attr_native_value',
+        '_attr_extra_state_attributes',
+        '_attr_native_unit_of_measurement',
+        '_attr_device_class',
+    ]
+
 
     # USED IN BOLTED APPS
     ######################################

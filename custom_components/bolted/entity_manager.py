@@ -4,6 +4,7 @@ from typing import Optional, Any
 from collections.abc import Mapping, MutableMapping
 from homeassistant.helpers.restore_state import RestoreEntity
 from .helpers import ObservableVariable
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoredExtraData
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -68,6 +69,7 @@ class BoltedEntity(RestoreEntity):
     _attr_should_poll = False
     _attr_extra_state_attributes: MutableMapping[str, Any]
     _attr_bolted_state_attributes: MutableMapping[str, Any]
+    _restorable_attributes = None
 
     def __init__(self, hass, bolted, unique_id, restore=False):
         self.hass = hass
@@ -102,6 +104,20 @@ class BoltedEntity(RestoreEntity):
         if hasattr(self, "_attr_bolted_state_attributes"):
             attrs.update(self._attr_bolted_state_attributes)
         return attrs
+
+    @property
+    def extra_restore_state_data(self) -> Optional[ExtraStoredData]:
+        """Return entity specific state data to be restored.
+        Implemented by platform classes.
+        """
+        self.bolted.logger.debug('extra_restore_state_data called on %s', self.entity_id)
+        if self._restorable_attributes is None:
+            return None
+
+        restore = dict()
+        for key in self._restorable_attributes:
+            restore[key] = getattr(self, key)
+        return RestoredExtraData(restore)
 
     async def async_added_to_hass(self):
         """Called when Home Assistant adds the entity to the registry""" 

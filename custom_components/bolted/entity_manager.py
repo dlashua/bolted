@@ -129,7 +129,7 @@ class BoltedEntity(RestoreEntity):
 
     def async_update(self):
         """Request an entity update from Home Assistant"""
-        if self._added:
+        if self._added.value is True:
             self.async_write_ha_state()
 
 

@@ -25,6 +25,7 @@ from homeassistant.helpers.service import async_set_service_schema
 import yaml
 import io
 from collections import OrderedDict
+from homeassistant.components.device_automation.trigger import async_attach_trigger as async_attach_device_automation_trigger
 
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
@@ -107,10 +108,13 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         return this_entity
 
     def get_entity_by_id(self, entity_id):
-        return EntityManager.get_by_entityid(entity_id)
+        return EntityManager.get_by_entity_id(entity_id)
 
     def get_device_id(self, entity_id):
         return EntityManager.get_device_id(entity_id)
+
+    def get_device_by_entity_id(self, entity_id):
+        return EntityManager.get_device_by_entity_id(entity_id)
 
     async def _startup(self, _ = None):
         if self._automation_switch is True:
@@ -171,6 +175,17 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
         async_set_service_schema(self.hass, DOMAIN, service, this_schema)
         self._registered_services.add(service)
+
+    async def listen_device_automation(self, config, automation_info, cb):
+        """Not Tested. Difficult to use. Doesn't clean up."""
+        if 'domain' not in config:
+            raise Exception('domain must be present in config')
+
+        if 'device_id' not in config:
+            raise Exception('device_id must be present in config')
+
+        x = await async_attach_device_automation_trigger(self.hass, config, cb, automation_info)
+        return x
 
 
     def listen_template(self, value_template, cb):

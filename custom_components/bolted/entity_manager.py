@@ -76,15 +76,22 @@ class EntityManager:
         return True
 
     @classmethod
-    def get_by_entityid(cls, entity_id):
+    def get_by_entity_id(cls, entity_id):
         return cls.entity_registry.async_get(entity_id)
 
     @classmethod
     def get_device_id(cls, entity_id):
-        this_entity = cls.get_by_entityid(entity_id)
+        this_entity = cls.get_by_entity_id(entity_id)
         if this_entity is None:
             return None
         return this_entity.device_id
+
+    @classmethod
+    def get_device_by_entity_id(cls, entity_id):
+        device_id = cls.get_device_id(entity_id)
+        if device_id is None:
+            return None
+        return cls.device_registry.async_get(device_id)
 
 
 class BoltedEntity(RestoreEntity):

@@ -1,0 +1,5 @@
+reload:
+  name: Reload Bolted
+  description: Checks Config and App Code and Reloads any changes
+  fields: {}
+    

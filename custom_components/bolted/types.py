@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 import inspect
 from homeassistant.helpers.event import (
     TrackTemplate,
+    TrackTemplateResult,
     async_track_template_result,
 )
 from homeassistant.helpers.template import Template
@@ -46,7 +47,18 @@ def recursive_match(search, source):
             return False
 
     return True    
-    
+
+# def match_sig(func):
+#     func_params = []
+#     func_signature = inspect.signature(func)
+
+#     @wraps(func)
+#     def inner_match_sig(**kwargs):
+#         bound_arguments = func_signature.bind(**kwargs)
+
+#         return func(*bound_arguments.args, **bound_arguments.kwargs)
+
+#     return inner_match_sig    
 
 def match_sig(func):
     func_params = []
@@ -56,13 +68,18 @@ def match_sig(func):
 
     @wraps(func)
     def inner_match_sig(**kwargs):
-        kwargs_to_send = {}
-        for key in func_params:
-            if key in kwargs:
-                kwargs_to_send[key] = kwargs[key]
-            else:
-                _LOGGER.warn('unknown argument %s in %s', key, func)
-                kwargs_to_send[key] = None
+        if 'kwargs' in func_params:
+            kwargs_to_send = kwargs
+        else:
+            kwargs_to_send = {}
+            for key in func_params:
+                if key in kwargs:
+                    kwargs_to_send[key] = kwargs.pop(key)
+                else:
+                    _LOGGER.warn('unknown argument %s in %s', key, func)
+                    kwargs_to_send[key] = None
+
+  
 
         return func(**kwargs_to_send)
 
@@ -187,57 +204,83 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         x = await async_attach_device_automation_trigger(self.hass, config, cb, automation_info)
         return x
 
+    def render_template(self, value_template):
+        template = Template(template, self.hass)
+        return template.async_render()
 
-    def listen_template(self, value_template, cb):
+    def listen_template(self, value_template, cb, trigger_now=False, **listen_kwargs):
         matched_cb = match_sig(cb)
 
         @callback
         @wraps(cb)
         def inner_cb(event, template_result):
             _LOGGER.debug('listen_template template=%s, event=%s, template_result=%s', value_template, event, template_result)
-            kwargs = dict(
+            if isinstance(template_result[0], TrackTemplateResult):
+                result = template_result[0].result
+                last_result = template_result[0].last_result
+            else:
+                result = template_result[0]
+                last_result = None
+
+            kwargs = listen_kwargs.copy()
+            kwargs.update(dict(
                 event=event,
-                result=template_result[0].result,
-                last_result=template_result[0].last_result
-            )
+                result=result,
+                last_result=last_result
+            ))
 
             matched_cb(**kwargs)
 
+        template = Template(value_template, self.hass)
         info = async_track_template_result(
             self.hass,
-            [TrackTemplate(Template(value_template, self.hass), None)],
+            [TrackTemplate(template, None)],
             inner_cb,
         )
 
         self.listeners.append(info.async_remove)
 
+        if trigger_now is True:
+            inner_cb(event=None, template_result=[template.async_render()])
+
         return info.async_remove
 
     listen_template_func = make_cb_decorator(listen_template)
 
-    def listen_state(self, entity_id, cb):
+    def listen_state(self, entity_id, cb, trigger_now=False, **listen_kwargs):
         matched_cb = match_sig(cb)
 
         @callback
         @wraps(cb)
         def inner_cb(event):
             self.logger.debug('listen_state event: %s', event)
-            kwargs = dict(
+            kwargs = listen_kwargs.copy()
+            kwargs.update(dict(
                 entity_id=event.data['entity_id'],
                 new_state=event.data['new_state'],
                 old_state=event.data['old_state']
-            )
+            ))
 
             matched_cb(**kwargs)
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)
         
+        if trigger_now is True:
+            state = self.state_get(entity_id)
+            kwargs = listen_kwargs.copy()
+            kwargs.update(dict(
+                entity_id=entity_id,
+                new_state=state,
+                old_state=None,
+            ))
+            matched_cb(**kwargs)
+
         return handle
 
     listen_state_func = make_cb_decorator(listen_state)
 
-    def listen_event(self, event_type, cb, filter={}):
+    def listen_event(self, event_type, cb, filter={}, **kwargs):
         matched_cb = match_sig(cb)
 
         @callback
@@ -246,10 +289,10 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             self.logger.debug('listen_event event: %s', event)
             if not recursive_match(filter, event.data):
                 return
-            kwargs = dict(
+            kwargs.update(dict(
                 event_type=event.event_type,
                 event_data=event.data,
-            )
+            ))
 
             matched_cb(**kwargs)
     

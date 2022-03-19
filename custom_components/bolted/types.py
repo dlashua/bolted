@@ -18,6 +18,13 @@ from .entity_manager import EntityManager
 import asyncio
 import pendulum
 import datetime
+from .const import (
+    DOMAIN
+)
+from homeassistant.helpers.service import async_set_service_schema
+import yaml
+import io
+from collections import OrderedDict
 
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
@@ -83,6 +90,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         self._logging_name = f'{__package__}.{self._get_logger_name()}.{self.__module__}.{self.name}'
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
+        self._registered_services = set()
         self._automation_switch = automation_switch
         self.automation_switch = None
         
@@ -122,6 +130,43 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def state_get(self, entity_id):
         return self.hass.states.get(entity_id)
+
+    def service_register(self, service, cb, schema=None):
+        self.hass.services.async_register(DOMAIN, service, cb)
+        this_schema = None
+        desc = cb.__doc__
+        if schema is not None:
+            this_schema = schema
+        elif desc is not None and desc.startswith('yaml'):
+            try:
+                desc = desc[4:].lstrip(" \n\r")
+                file_desc = io.StringIO(desc)
+                this_schema = yaml.load(file_desc, Loader=yaml.BaseLoader) or OrderedDict()
+                file_desc.close()
+            except Exception as exc:
+                self.logger.error(
+                    "Unable to decode yaml doc_string for %s(): %s", self.name, str(exc),
+                )
+                raise exc
+        elif desc is not None and len(desc) > 0:
+            this_schema = {
+                "name": service,
+                "description": desc,
+            }
+        else:
+            this_schema = {
+                "name": service,
+                "description": "Bolted Service"
+            }
+
+        async_set_service_schema(self.hass, DOMAIN, service, this_schema)
+        self._registered_services.add(service)
+
+    def service_remove(self, service):
+        self.hass.services.async_remove(DOMAIN, service)
+        if service in self._registered_services:
+            self._registered_services.remove(service)
+
 
     def listen_template(self, value_template, cb):
         matched_cb = match_sig(cb)
@@ -247,6 +292,10 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             this_listener = self.listeners.pop()
             self.logger.debug('Killing %s', this_listener)
             this_listener()
+
+        while self._registered_services:
+            this_service = self._registered_services.pop()
+            self.service_remove(this_service)
 
     def __del__(self):
         return self.shutdown()

@@ -76,13 +76,14 @@ async def call_or_await(cb, *args, **kwargs):
 
 class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
-    def __init__(self, hass: HomeAssistant, name, config):
+    def __init__(self, hass: HomeAssistant, name, config, automation_switch=False):
         self.hass = hass
         self.name = name
         self.config = config
         self._logging_name = f'{__package__}.{self._get_logger_name()}.{self.__module__}.{self.name}'
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
+        self._automation_switch = automation_switch
         self.automation_switch = None
         
         if self.hass.is_running:
@@ -94,24 +95,29 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         return await EntityManager.get(self, platform, name, **kwargs)
 
     async def _startup(self, _ = None):
-        self.automation_switch = await self.get_entity('switch', 'automation', restore=True)
-        self.logger.debug('Automation Switch Entity Created %s', self.name)
-        async def turn_on(*args, **kwargs):
-            await call_or_await(self.startup)
-            self.automation_switch.set(True)
-        async def turn_off(*args, **kwargs):
-            self.shutdown()
-            self.automation_switch.set(False)
+        if self._automation_switch is True:
+            self.automation_switch = await self.get_entity('switch', 'automation', restore=True)
+            self.logger.debug('Automation Switch Entity Created %s', self.name)
+            async def turn_on(*args, **kwargs):
+                await call_or_await(self.startup)
+                self.automation_switch.set(True)
+            async def turn_off(*args, **kwargs):
+                self.shutdown()
+                self.automation_switch.set(False)
 
-        self.automation_switch.on_turn_on(turn_on)
-        self.automation_switch.on_turn_off(turn_off)
+            self.automation_switch.on_turn_on(turn_on)
+            self.automation_switch.on_turn_off(turn_off)
 
-        self.logger.debug('Automation Switch for %s is %s', self.name, self.automation_switch.is_on)
-        self.logger.debug('Automation Switch State for %s is %s', self.name, self.automation_switch.state)
-        if self.automation_switch.is_on is not False:
-            await turn_on()
-        else:
-            await turn_off()
+            self.logger.debug('Automation Switch for %s is %s', self.name, self.automation_switch.is_on)
+            self.logger.debug('Automation Switch State for %s is %s', self.name, self.automation_switch.state)
+            if self.automation_switch.is_on is not False:
+                await turn_on()
+            else:
+                await turn_off()
+            
+            return
+        
+        await call_or_await(self.startup)
 
 
     def listen_template(self, value_template, cb):

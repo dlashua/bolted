@@ -51,7 +51,11 @@ class Manager():
         _LOGGER.debug("@reload")
         reloaded_apps = await self.refresh_available_apps()
         bolted = await self.get_component_config()
-        apps_config = bolted.get('apps', {})
+        try:
+            apps_config = bolted.get('apps', None)
+        except AttributeError:
+            apps_config = None
+            
         if apps_config is not None:
             apps_to_load = {}
             seen = []

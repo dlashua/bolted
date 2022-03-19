@@ -1,4 +1,5 @@
 import logging
+from os import remove
 from types import coroutine
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.core import callback
@@ -132,6 +133,28 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def get_device_by_entity_id(self, entity_id):
         return EntityManager.get_device_by_entity_id(entity_id)
+
+    @staticmethod
+    def debounce(time):
+        def deco_debounce(func):
+            handle = None
+
+            @wraps(func)
+            def inner_debounce(self, *args, **kwargs):
+                nonlocal handle
+                if handle is not None:
+                    handle()
+
+                def remove_handle_and_run():
+                    nonlocal handle
+                    handle = None
+                    func(self, *args, **kwargs)
+
+                handle = self.run_in(time, remove_handle_and_run)
+                
+            return inner_debounce
+        
+        return deco_debounce
 
     async def _startup(self, _ = None):
         if self._automation_switch is True:

@@ -91,6 +91,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
         self._registered_services = set()
+        self._registered_entities = []
         self._automation_switch = automation_switch
         self.automation_switch = None
         
@@ -100,7 +101,10 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, self._startup)
 
     async def get_entity(self, platform, name, **kwargs):
-        return await EntityManager.get(self, platform, name, **kwargs)
+        this_entity = await EntityManager.get(self, platform, name, **kwargs)
+        if this_entity not in self._registered_entities:
+            self._registered_entities.append(this_entity)
+        return this_entity
 
     async def _startup(self, _ = None):
         if self._automation_switch is True:
@@ -161,11 +165,6 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
         async_set_service_schema(self.hass, DOMAIN, service, this_schema)
         self._registered_services.add(service)
-
-    def service_remove(self, service):
-        self.hass.services.async_remove(DOMAIN, service)
-        if service in self._registered_services:
-            self._registered_services.remove(service)
 
 
     def listen_template(self, value_template, cb):
@@ -295,7 +294,11 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
         while self._registered_services:
             this_service = self._registered_services.pop()
-            self.service_remove(this_service)
+            self.hass.services.async_remove(DOMAIN, this_service)
+
+        while self._registered_entities:
+            this_entity = self._registered_entities.pop()
+            EntityManager.remove(this_entity)
 
     def __del__(self):
         return self.shutdown()

@@ -5,6 +5,7 @@ from collections.abc import Mapping, MutableMapping
 from homeassistant.helpers.restore_state import RestoreEntity
 from .helpers import ObservableVariable
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoredExtraData
+import homeassistant.helpers.entity_registry as hass_entity_registry
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -21,6 +22,8 @@ class EntityManager:
     def init(cls, hass):
         """Initialize Class Variables"""
         cls.hass = hass
+        cls.entity_registry = hass_entity_registry.async_get(hass)
+
 
     @classmethod
     def register_platform(cls, platform, adder, entity_class):
@@ -52,6 +55,15 @@ class EntityManager:
         cls.platform_adders[platform]([new_entity])
         await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity
+
+    @classmethod
+    def remove(cls, entity):
+        entity_id = entity.entity_id
+        unique_id = entity.unique_id
+        entity_platform, _ = entity_id.split('.', 1)
+        _LOGGER.debug('Removing Entity %s', entity_id)
+        cls.entity_registry.async_remove(entity_id)
+        del cls.registered_entities[entity_platform][unique_id]
 
     @classmethod
     async def wait_platform_registered(cls, platform):

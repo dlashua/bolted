@@ -120,6 +120,9 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         await call_or_await(self.startup)
 
 
+    def state_get(self, entity_id):
+        return self.hass.states.get(entity_id)
+
     def listen_template(self, value_template, cb):
         matched_cb = match_sig(cb)
 
@@ -135,7 +138,6 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
             matched_cb(**kwargs)
 
-        _LOGGER.debug('hass is %s', self.hass)
         info = async_track_template_result(
             self.hass,
             [TrackTemplate(Template(value_template, self.hass), None)],

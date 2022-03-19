@@ -6,6 +6,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .helpers import ObservableVariable
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoredExtraData
 import homeassistant.helpers.entity_registry as hass_entity_registry
+import homeassistant.helpers.device_registry as hass_device_registry
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -23,6 +24,7 @@ class EntityManager:
         """Initialize Class Variables"""
         cls.hass = hass
         cls.entity_registry = hass_entity_registry.async_get(hass)
+        cls.device_registry = hass_device_registry.async_get(hass)
 
 
     @classmethod
@@ -73,6 +75,17 @@ class EntityManager:
 
         return True
 
+    @classmethod
+    def get_by_entityid(cls, entity_id):
+        return cls.entity_registry.async_get(entity_id)
+
+    @classmethod
+    def get_device_id(cls, entity_id):
+        this_entity = cls.get_by_entityid(entity_id)
+        if this_entity is None:
+            return None
+        return this_entity.device_id
+
 
 class BoltedEntity(RestoreEntity):
     """Base Class for all Bolted Entities"""
@@ -121,7 +134,6 @@ class BoltedEntity(RestoreEntity):
         """Return entity specific state data to be restored.
         Implemented by platform classes.
         """
-        self.bolted.logger.debug('extra_restore_state_data called on %s', self.entity_id)
         if self._restorable_attributes is None:
             return None
 

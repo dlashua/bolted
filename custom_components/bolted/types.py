@@ -106,6 +106,12 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             self._registered_entities.append(this_entity)
         return this_entity
 
+    def get_entity_by_id(self, entity_id):
+        return EntityManager.get_by_entityid(entity_id)
+
+    def get_device_id(self, entity_id):
+        return EntityManager.get_device_id(entity_id)
+
     async def _startup(self, _ = None):
         if self._automation_switch is True:
             self.automation_switch = await self.get_entity('switch', 'automation', restore=True)

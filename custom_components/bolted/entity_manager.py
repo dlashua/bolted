@@ -40,20 +40,22 @@ class EntityManager:
 
     @classmethod
     async def get(cls, bolted, platform, name, restore=False):
-        unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
         """Get an Entity from Bolted"""
+        unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
         await cls.wait_platform_registered(platform)
         if platform not in cls.registered_entities or unique_id not in cls.registered_entities[platform]:
-            await cls.create(bolted, platform, unique_id, restore=restore)
+            await cls.create(bolted, platform, name, restore=restore)
         
         return cls.registered_entities[platform][unique_id]
 
     @classmethod
-    async def create(cls, bolted, platform, unique_id, restore=False):
+    async def create(cls, bolted, platform, name, restore=False):
         """Create entity from Bolted."""
+        unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
         await cls.wait_platform_registered(platform)
         _LOGGER.debug('Created New Entity %s %s', platform, unique_id)
         new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id, restore=restore)
+        new_entity.entity_id = f'{platform}.{bolted.name}'
         cls.platform_adders[platform]([new_entity])
         await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity

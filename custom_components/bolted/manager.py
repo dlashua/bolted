@@ -12,6 +12,7 @@ from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 import yaml
 from homeassistant.requirements import async_process_requirements
+import copy 
 
 from .const import (
     DOMAIN,
@@ -55,7 +56,7 @@ class Manager():
             apps_config = bolted.get('apps', None)
         except AttributeError:
             apps_config = None
-            
+
         if apps_config is not None:
             apps_to_load = {}
             seen = []
@@ -220,7 +221,10 @@ class Manager():
             options = {}
             if 'module_options' in app_manifest:
                 options = app_manifest['module_options'] 
-            this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config, **options)
+            app_config_copy = copy.deepcopy(app_config)
+            app_config_copy.pop('app')
+            app_config_copy.pop('name')
+            this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config_copy, **options)
             _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
             self.loaded_app_instances[app_instance_name] = {
                 "config": app_config,

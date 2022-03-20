@@ -212,8 +212,14 @@ class Manager():
                 self.available_apps[app_name]['path']
             )
 
-            self.loaded_app_modules[app_name] = importlib.util.module_from_spec(this_module_spec)
-            this_module_spec.loader.exec_module(self.loaded_app_modules[app_name])
+            loading_module = importlib.util.module_from_spec(this_module_spec)
+            try:
+                this_module_spec.loader.exec_module(loading_module)
+            except Exception as e:
+                _LOGGER.error("Exception loading %s", app_name)
+                _LOGGER.exception(e)
+                return None
+            self.loaded_app_modules[app_name] = loading_module
             _LOGGER.debug('Loaded Module %s', app_name)
             _LOGGER.debug('MANIFEST %s %s', app_name, self.available_apps[app_name]['manifest'])
 

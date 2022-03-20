@@ -60,12 +60,14 @@ class EntityManager:
 
     @classmethod
     def remove(cls, entity):
-        entity_id = entity.entity_id
-        unique_id = entity.unique_id
-        entity_platform, _ = entity_id.split('.', 1)
-        _LOGGER.debug('Removing Entity %s', entity_id)
-        cls.entity_registry.async_remove(entity_id)
-        del cls.registered_entities[entity_platform][unique_id]
+        entity.set(None, {})
+        # entity IDs don't stick with this. commenting for now.
+        # entity_id = entity.entity_id
+        # unique_id = entity.unique_id
+        # entity_platform, _ = entity_id.split('.', 1)
+        # _LOGGER.debug('Removing Entity %s', entity_id)
+        # cls.entity_registry.async_remove(entity_id)
+        # del cls.registered_entities[entity_platform][unique_id]
 
     @classmethod
     async def wait_platform_registered(cls, platform):

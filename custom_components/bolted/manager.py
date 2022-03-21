@@ -21,7 +21,7 @@ from .types import HassApp
 
 from .const import (
     DOMAIN,
-    FOLDER,
+    APP_DIR,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
@@ -35,7 +35,7 @@ class StrictBaseModel(BaseModel):
 class AppManifest(StrictBaseModel):
     requirements: Optional[List[str]] = None
     options: Optional[Dict] = None
-    
+
 class App(StrictBaseModel):
     name: str
     path: str
@@ -126,7 +126,7 @@ class Manager():
 
     async def refresh_available_apps(self):
         available_apps: Dict[str, App] = dict()
-        modules_path = self.hass.config.path(FOLDER)
+        modules_path = self.hass.config.path(APP_DIR)
         for (dirpath, dirnames, filenames) in os.walk(modules_path):
             _LOGGER.debug("walking %s", dirpath)
             if "__init__.py" in filenames:
@@ -214,7 +214,7 @@ class Manager():
 
         event_handler = EventHandler(['*.py', '*.yaml'], reload_action)
         self._observer = Observer()
-        self._observer.schedule(event_handler, self.hass.config.path(FOLDER), recursive=True)
+        self._observer.schedule(event_handler, self.hass.config.path(APP_DIR), recursive=True)
         self._observer.start()
         return True
 
@@ -259,9 +259,9 @@ class Manager():
         app_config_copy.pop('app')
         app_config_copy.pop('name')
         try:
-            this_obj = this_app.module.Module(self.hass, app_instance_name, app_config_copy, **options)
+            this_obj = this_app.module.App(self.hass, app_instance_name, app_config_copy, **options)
         except AttributeError:
-            _LOGGER.error("%s doesn't have a Module class", app_name)
+            _LOGGER.error("%s doesn't have an 'App' class", app_name)
         else:
             _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
             self.app_instances[app_instance_name] = AppInstance(

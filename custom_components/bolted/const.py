@@ -1,5 +1,5 @@
-DOMAIN = 'bolted'
-APP_DIR = 'bolted/apps'
-SCRIPT_DIR = 'bolted/scripts'
-MODULE_DIR = 'bolted/modules'
-SERVICE_RELOAD = 'reload'
+DOMAIN = "bolted"
+APP_DIR = "bolted/apps"
+SCRIPT_DIR = "bolted/scripts"
+MODULE_DIR = "bolted/modules"
+SERVICE_RELOAD = "reload"

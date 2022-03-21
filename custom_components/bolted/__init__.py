@@ -22,7 +22,8 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 SCRIPTS = []
 
-PLATFORMS = ['switch', 'binary_sensor', 'sensor']
+PLATFORMS = ["switch", "binary_sensor", "sensor"]
+
 
 # hass_config is the entire Home Assistant Configuration as an OrderedDict
 async def async_setup(hass: HomeAssistant, _hass_config) -> bool:
@@ -37,7 +38,6 @@ async def async_setup(hass: HomeAssistant, _hass_config) -> bool:
 
     EntityManager.init(hass)
 
-
     for platform_domain in PLATFORMS:
         hass.async_create_task(
             discovery.async_load_platform(
@@ -50,4 +50,3 @@ async def async_setup(hass: HomeAssistant, _hass_config) -> bool:
         )
 
     return await manager.start()
-

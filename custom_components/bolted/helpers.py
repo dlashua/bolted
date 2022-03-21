@@ -3,7 +3,8 @@ import logging
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-class ObservableVariable():
+
+class ObservableVariable:
     def __init__(self, value):
         self._value = value
         self._watchers = set()
@@ -32,4 +33,3 @@ class ObservableVariable():
 
     def wait_cb(self, cb):
         self._callbacks.add(cb)
-        

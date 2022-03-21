@@ -4,7 +4,10 @@ from typing import Optional, Any
 from collections.abc import Mapping, MutableMapping
 from homeassistant.helpers.restore_state import RestoreEntity
 from .helpers import ObservableVariable
-from homeassistant.helpers.restore_state import ExtraStoredData, RestoredExtraData
+from homeassistant.helpers.restore_state import (
+    ExtraStoredData,
+    RestoredExtraData,
+)
 import homeassistant.helpers.entity_registry as hass_entity_registry
 import homeassistant.helpers.device_registry as hass_device_registry
 
@@ -13,6 +16,7 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 class EntityManager:
     """Entity Manager."""
+
     hass = None
 
     platform_adders = {}
@@ -25,7 +29,6 @@ class EntityManager:
         cls.hass = hass
         cls.entity_registry = hass_entity_registry.async_get(hass)
         cls.device_registry = hass_device_registry.async_get(hass)
-
 
     @classmethod
     def register_platform(cls, platform, adder, entity_class):
@@ -41,21 +44,26 @@ class EntityManager:
     @classmethod
     async def get(cls, bolted, platform, name, restore=False):
         """Get an Entity from Bolted"""
-        unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
+        unique_id = f"{bolted.__class__.__module__}::{bolted.name}::{name}"
         await cls.wait_platform_registered(platform)
-        if platform not in cls.registered_entities or unique_id not in cls.registered_entities[platform]:
+        if (
+            platform not in cls.registered_entities
+            or unique_id not in cls.registered_entities[platform]
+        ):
             await cls.create(bolted, platform, name, restore=restore)
-        
+
         return cls.registered_entities[platform][unique_id]
 
     @classmethod
     async def create(cls, bolted, platform, name, restore=False):
         """Create entity from Bolted."""
-        unique_id = f'{bolted.__class__.__module__}::{bolted.name}::{name}'
+        unique_id = f"{bolted.__class__.__module__}::{bolted.name}::{name}"
         await cls.wait_platform_registered(platform)
-        _LOGGER.debug('Created New Entity %s %s', platform, unique_id)
-        new_entity = cls.platform_classes[platform](cls.hass, bolted, unique_id, restore=restore)
-        new_entity.entity_id = f'{platform}.{bolted.name}'
+        _LOGGER.debug("Created New Entity %s %s", platform, unique_id)
+        new_entity = cls.platform_classes[platform](
+            cls.hass, bolted, unique_id, restore=restore
+        )
+        new_entity.entity_id = f"{platform}.{bolted.name}"
         cls.platform_adders[platform]([new_entity])
         await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity
@@ -75,7 +83,7 @@ class EntityManager:
     async def wait_platform_registered(cls, platform):
         """Wait for platform registration."""
         if platform not in cls.platform_classes:
-            raise KeyError(f'Platform {platform} not registered.')
+            raise KeyError(f"Platform {platform} not registered.")
 
         return True
 
@@ -127,9 +135,9 @@ class BoltedEntity(RestoreEntity):
 
     async def wait_for_added(self):
         while self._added.value is not True:
-            _LOGGER.debug('Waiting for Entity to be added %s', self.unique_id)
+            _LOGGER.debug("Waiting for Entity to be added %s", self.unique_id)
             await self._added.wait()
-        
+
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         """Return entity specific state attributes."""
@@ -154,18 +162,22 @@ class BoltedEntity(RestoreEntity):
         return RestoredExtraData(restore)
 
     async def async_added_to_hass(self):
-        """Called when Home Assistant adds the entity to the registry""" 
+        """Called when Home Assistant adds the entity to the registry"""
         await super().async_added_to_hass()
 
         if self._should_restore:
             last_data = await self.async_get_last_extra_data()
-            self.bolted.logger.debug("Last Data %s: %s", self.unique_id, last_data)
+            self.bolted.logger.debug(
+                "Last Data %s: %s", self.unique_id, last_data
+            )
             if last_data is not None:
                 for key, value in last_data.as_dict().items():
-                    self.bolted.logger.debug('Restore %s = %s value', key, value)
+                    self.bolted.logger.debug(
+                        "Restore %s = %s value", key, value
+                    )
                     setattr(self, key, value)
 
-        self._added.value = True   
+        self._added.value = True
         self.async_update()
 
         _LOGGER.debug(
@@ -181,7 +193,3 @@ class BoltedEntity(RestoreEntity):
         """Request an entity update from Home Assistant"""
         if self._added.value is True:
             self.async_write_ha_state()
-
-
-
-

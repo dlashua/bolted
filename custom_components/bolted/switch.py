@@ -6,26 +6,31 @@ from .types import call_or_await
 
 PLATFORM = "switch"
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+
+async def async_setup_platform(
+    hass, config, async_add_entities, discovery_info=None
+):
     """Initialize Bolted Switch Platform"""
     EntityManager.register_platform(PLATFORM, async_add_entities, BoltedSwitch)
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Initialize Pyscript Switch Config"""
-    return await async_setup_platform(hass, config_entry.data, async_add_entities, discovery_info=None)
+    return await async_setup_platform(
+        hass, config_entry.data, async_add_entities, discovery_info=None
+    )
 
 
 class BoltedSwitch(BoltedEntity, ToggleEntity):
     """A Bolted Switch Entity"""
-    
+
     _turn_on_handler = None
     _turn_off_handler = None
     _attr_is_on: Optional[bool] = None
     _attr_extra_state_attributes: dict = {}
     _restorable_attributes = [
-        '_attr_is_on',
-        '_attr_extra_state_attributes',
+        "_attr_is_on",
+        "_attr_extra_state_attributes",
     ]
 
     async def async_turn_on(self, **kwargs):
@@ -36,7 +41,10 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
         if callable(self._turn_on_handler):
             await call_or_await(self._turn_on_handler, **kwargs)
         else:
-            raise RuntimeError(f"Unable to Call turn_on_handler of type {type(self._turn_on_handler)}")
+            raise RuntimeError((
+                f"Unable to Call turn_on_handler of type"
+                f" {type(self._turn_on_handler)}"
+            ))
 
     async def async_turn_off(self, **kwargs):
         """Handle turn_off request."""
@@ -46,8 +54,10 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
         if callable(self._turn_off_handler):
             await call_or_await(self._turn_off_handler, **kwargs)
         else:
-            raise RuntimeError(f"Unable to Call turn_off_handler of type {type(self._turn_off_handler)}")
-
+            raise RuntimeError((
+                f"Unable to Call turn_off_handler of type"
+                f" {type(self._turn_off_handler)}"
+            ))
 
     # USED IN BOLTED APPS
     ######################################

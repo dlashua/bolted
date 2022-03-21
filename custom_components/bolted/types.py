@@ -1,6 +1,4 @@
 import logging
-from os import remove
-from types import coroutine
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.core import callback
 from homeassistant.const import (
@@ -20,23 +18,24 @@ from .entity_manager import EntityManager
 import asyncio
 import pendulum
 import datetime
-from .const import (
-    DOMAIN
-)
+from .const import DOMAIN
 from homeassistant.helpers.service import async_set_service_schema
 import yaml
 import io
 from collections import OrderedDict
-from homeassistant.components.device_automation.trigger import async_attach_trigger as async_attach_device_automation_trigger
+from homeassistant.components.device_automation.trigger import (
+    async_attach_trigger as async_attach_device_automation_trigger,
+)
 
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
+
 
 def recursive_match(search, source):
     if isinstance(search, dict):
         if not isinstance(source, dict):
             return False
-        
+
         for key in search:
             if key not in source:
                 return False
@@ -47,7 +46,8 @@ def recursive_match(search, source):
         if search != source:
             return False
 
-    return True    
+    return True
+
 
 # def match_sig(func):
 #     func_params = []
@@ -59,7 +59,8 @@ def recursive_match(search, source):
 
 #         return func(*bound_arguments.args, **bound_arguments.kwargs)
 
-#     return inner_match_sig    
+#     return inner_match_sig
+
 
 def match_sig(func):
     func_params = []
@@ -69,7 +70,7 @@ def match_sig(func):
 
     @wraps(func)
     def inner_match_sig(**kwargs):
-        if 'kwargs' in func_params:
+        if "kwargs" in func_params:
             kwargs_to_send = kwargs
         else:
             kwargs_to_send = {}
@@ -77,22 +78,24 @@ def match_sig(func):
                 if key in kwargs:
                     kwargs_to_send[key] = kwargs.pop(key)
                 else:
-                    _LOGGER.warn('unknown argument %s in %s', key, func)
+                    _LOGGER.warn("unknown argument %s in %s", key, func)
                     kwargs_to_send[key] = None
-
-  
 
         return func(**kwargs_to_send)
 
     return inner_match_sig
-    
+
+
 def make_cb_decorator(orig_func):
     def inner_cb_decorator(*args, **kwargs):
         @wraps(orig_func)
         def inner_cb_decorator_func(func):
             return orig_func(cb=func, *args, **kwargs)
+
         return inner_cb_decorator_func
+
     return inner_cb_decorator
+
 
 async def call_or_await(cb, *args, **kwargs):
     if asyncio.iscoroutinefunction(cb):
@@ -100,24 +103,32 @@ async def call_or_await(cb, *args, **kwargs):
     else:
         cb(*args, **kwargs)
 
-class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
-    def __init__(self, hass: HomeAssistant, name, config, automation_switch=False):
+class BoltedBase(metaclass=abc.ABCMeta):
+    def __init__(
+        self, hass: HomeAssistant, name, config, automation_switch=False
+    ):
         self.hass = hass
         self.name = name
         self.config = config
-        self._logging_name = f'{__package__}.{self._get_logger_name()}.{self.__module__}.{self.name}'
+        self._logging_name = (
+            f"{__package__}"
+            f".{self._get_logger_name()}"
+            f".{self.__module__}.{self.name}"
+        )
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
         self._registered_services = set()
         self._registered_entities = []
         self._automation_switch = automation_switch
         self.automation_switch = None
-        
+
         if self.hass.is_running:
             self.hass.add_job(self._startup)
         else:
-            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, self._startup)
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_START, self._startup
+            )
 
     async def get_entity(self, platform, name, **kwargs):
         this_entity = await EntityManager.get(self, platform, name, **kwargs)
@@ -151,18 +162,22 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
                     func(self, *args, **kwargs)
 
                 handle = self.run_in(time, remove_handle_and_run)
-                
+
             return inner_debounce
-        
+
         return deco_debounce
 
-    async def _startup(self, _ = None):
+    async def _startup(self, _=None):
         if self._automation_switch is True:
-            self.automation_switch = await self.get_entity('switch', 'automation', restore=True)
-            self.logger.debug('Automation Switch Entity Created %s', self.name)
+            self.automation_switch = await self.get_entity(
+                "switch", "automation", restore=True
+            )
+            self.logger.debug("Automation Switch Entity Created %s", self.name)
+
             async def turn_on(*args, **kwargs):
                 await call_or_await(self.startup)
                 self.automation_switch.set(True)
+
             async def turn_off(*args, **kwargs):
                 self.shutdown()
                 self.automation_switch.set(False)
@@ -170,17 +185,24 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             self.automation_switch.on_turn_on(turn_on)
             self.automation_switch.on_turn_off(turn_off)
 
-            self.logger.debug('Automation Switch for %s is %s', self.name, self.automation_switch.is_on)
-            self.logger.debug('Automation Switch State for %s is %s', self.name, self.automation_switch.state)
+            self.logger.debug(
+                "Automation Switch for %s is %s",
+                self.name,
+                self.automation_switch.is_on,
+            )
+            self.logger.debug(
+                "Automation Switch State for %s is %s",
+                self.name,
+                self.automation_switch.state,
+            )
             if self.automation_switch.is_on is not False:
                 await turn_on()
             else:
                 await turn_off()
-            
-            return
-        
-        await call_or_await(self.startup)
 
+            return
+
+        await call_or_await(self.startup)
 
     def state_get(self, entity_id):
         return self.hass.states.get(entity_id)
@@ -191,15 +213,20 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         desc = cb.__doc__
         if schema is not None:
             this_schema = schema
-        elif desc is not None and desc.startswith('yaml'):
+        elif desc is not None and desc.startswith("yaml"):
             try:
                 desc = desc[4:].lstrip(" \n\r")
                 file_desc = io.StringIO(desc)
-                this_schema = yaml.load(file_desc, Loader=yaml.BaseLoader) or OrderedDict()
+                this_schema = (
+                    yaml.load(file_desc, Loader=yaml.BaseLoader)
+                    or OrderedDict()
+                )
                 file_desc.close()
             except Exception as exc:
                 self.logger.error(
-                    "Unable to decode yaml doc_string for %s(): %s", self.name, str(exc),
+                    "Unable to decode yaml doc_string for %s(): %s",
+                    self.name,
+                    str(exc),
                 )
                 raise exc
         elif desc is not None and len(desc) > 0:
@@ -208,36 +235,42 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
                 "description": desc,
             }
         else:
-            this_schema = {
-                "name": service,
-                "description": "Bolted Service"
-            }
+            this_schema = {"name": service, "description": "Bolted Service"}
 
         async_set_service_schema(self.hass, DOMAIN, service, this_schema)
         self._registered_services.add(service)
 
     async def listen_device_automation(self, config, automation_info, cb):
         """Not Tested. Difficult to use. Doesn't clean up."""
-        if 'domain' not in config:
-            raise Exception('domain must be present in config')
+        if "domain" not in config:
+            raise Exception("domain must be present in config")
 
-        if 'device_id' not in config:
-            raise Exception('device_id must be present in config')
+        if "device_id" not in config:
+            raise Exception("device_id must be present in config")
 
-        x = await async_attach_device_automation_trigger(self.hass, config, cb, automation_info)
+        x = await async_attach_device_automation_trigger(
+            self.hass, config, cb, automation_info
+        )
         return x
 
-    def render_template(self, value_template):
+    def render_template(self, template):
         template = Template(template, self.hass)
         return template.async_render()
 
-    def listen_template(self, value_template, cb, trigger_now=False, **listen_kwargs):
+    def listen_template(
+        self, value_template, cb, trigger_now=False, **listen_kwargs
+    ):
         matched_cb = match_sig(cb)
 
         @callback
         @wraps(cb)
         def inner_cb(event, template_result):
-            _LOGGER.debug('listen_template template=%s, event=%s, template_result=%s', value_template, event, template_result)
+            _LOGGER.debug(
+                "listen_template template=%s, event=%s, template_result=%s",
+                value_template,
+                event,
+                template_result,
+            )
             if isinstance(template_result[0], TrackTemplateResult):
                 result = template_result[0].result
                 last_result = template_result[0].last_result
@@ -246,11 +279,9 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
                 last_result = None
 
             kwargs = listen_kwargs.copy()
-            kwargs.update(dict(
-                event=event,
-                result=result,
-                last_result=last_result
-            ))
+            kwargs.update(
+                dict(event=event, result=result, last_result=last_result)
+            )
 
             matched_cb(**kwargs)
 
@@ -276,27 +307,31 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         @callback
         @wraps(cb)
         def inner_cb(event):
-            self.logger.debug('listen_state event: %s', event)
+            self.logger.debug("listen_state event: %s", event)
             kwargs = listen_kwargs.copy()
-            kwargs.update(dict(
-                entity_id=event.data['entity_id'],
-                new_state=event.data['new_state'],
-                old_state=event.data['old_state']
-            ))
+            kwargs.update(
+                dict(
+                    entity_id=event.data["entity_id"],
+                    new_state=event.data["new_state"],
+                    old_state=event.data["old_state"],
+                )
+            )
 
             matched_cb(**kwargs)
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)
-        
+
         if trigger_now is True:
             state = self.state_get(entity_id)
             kwargs = listen_kwargs.copy()
-            kwargs.update(dict(
-                entity_id=entity_id,
-                new_state=state,
-                old_state=None,
-            ))
+            kwargs.update(
+                dict(
+                    entity_id=entity_id,
+                    new_state=state,
+                    old_state=None,
+                )
+            )
             matched_cb(**kwargs)
 
         return handle
@@ -309,16 +344,18 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
         @callback
         @wraps(cb)
         def inner_cb(event):
-            self.logger.debug('listen_event event: %s', event)
+            self.logger.debug("listen_event event: %s", event)
             if not recursive_match(filter, event.data):
                 return
-            kwargs.update(dict(
-                event_type=event.event_type,
-                event_data=event.data,
-            ))
+            kwargs.update(
+                dict(
+                    event_type=event.event_type,
+                    event_data=event.data,
+                )
+            )
 
             matched_cb(**kwargs)
-    
+
         handle = self.hass.bus.async_listen(event_type, inner_cb)
         self.listeners.append(handle)
 
@@ -342,7 +379,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
             fut = pendulum.parse(time, tz=now.tz)
         elif isinstance(time, datetime.time):
             fut = pendulum.parse(str(time), tz=now.tz)
-        
+
         seconds = (fut - now).in_seconds()
 
         if seconds <= 0:
@@ -358,6 +395,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
 
     def add_job(self, target):
         future = self.hass.async_run_job(target)
+
         def cancel_add_job():
             future.cancel()
 
@@ -376,7 +414,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
     def shutdown(self):
         while self.listeners:
             this_listener = self.listeners.pop()
-            self.logger.debug('Killing %s', this_listener)
+            self.logger.debug("Killing %s", this_listener)
             this_listener()
 
         while self._registered_services:
@@ -390,7 +428,7 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
     def __del__(self):
         return self.shutdown()
 
-    ###### TO OVERRIDE
+    # TO OVERRIDE
     @abc.abstractmethod
     def startup(self):
         pass
@@ -399,9 +437,12 @@ class HassModuleTypeBase(metaclass=abc.ABCMeta):
     def _get_logger_name(self):
         pass
 
-class HassApp(HassModuleTypeBase):
-    def _get_logger_name(self):
-        return 'app'
 
-class HassScript(HassModuleTypeBase):
-    pass
+class BoltedApp(BoltedBase):
+    def _get_logger_name(self):
+        return "app"
+
+
+class BoltedScript(BoltedBase):
+    def _get_logger_name(self):
+        return "script"

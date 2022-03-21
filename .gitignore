@@ -1,3 +1,4 @@
 home-assistant/
 __pycache__/
 custom-components/bolted/__pycache__/
+.vscode/

@@ -41,12 +41,12 @@ class Manager():
     async def stop_app(self, app_instance_name):
         try:
             this_app = self.loaded_app_instances.pop(app_instance_name)
+        except KeyError:
+            _LOGGER.debug('Tried to Kill %s but it was not loaded', app_instance_name)
+        else:
             _LOGGER.debug('Killing %s', app_instance_name)
             this_app['obj'].shutdown()
             del this_app
-        except KeyError:
-            _LOGGER.debug('Tried to Kill %s but it was not loaded', app_instance_name)
-
 
     async def reload(self):
         _LOGGER.debug("@reload")
@@ -55,47 +55,46 @@ class Manager():
         try:
             apps_config = bolted.get('apps', None)
         except AttributeError:
-            apps_config = None
+            apps_config = []
 
-        if apps_config is not None:
-            apps_to_load = {}
-            seen = []
-            for app_config in apps_config:
-                try:
-                    app_name = app_config['app']
-                    app_instance_name = app_config['name']
-                except:
-                    _LOGGER.warn("Required Keys (app, name) not present in config %s", app_config)
+        apps_to_load = {}
+        seen = []
+        for app_config in apps_config:
+            try:
+                app_name = app_config['app']
+                app_instance_name = app_config['name']
+            except:
+                _LOGGER.warn("Required Keys (app, name) not present in config %s", app_config)
+                continue
+
+            if app_instance_name in seen:
+                _LOGGER.warn("Multiple Apps share the same name: %s", app_instance_name)
+                continue
+
+            seen.append(app_instance_name)
+
+            if app_name in reloaded_apps:
+                await self.stop_app(app_instance_name)
+
+            if app_instance_name in self.loaded_app_instances:
+                if app_config != self.loaded_app_instances[app_instance_name]['config']:
+                    await self.stop_app(app_instance_name)
+                else:
                     continue
 
-                if app_instance_name in seen:
-                    _LOGGER.warn("Multiple Apps share the same name: %s", app_instance_name)
-                    continue
+            apps_to_load[app_instance_name] = app_config
 
-                seen.append(app_instance_name)
+        app_instances_to_remove = []
+        for app_instance_name in self.loaded_app_instances:
+            if app_instance_name not in seen:
+                app_instances_to_remove.append(app_instance_name)
 
-                if app_name in reloaded_apps:
-                    await self.stop_app(app_instance_name)
+        for app_instance_name in app_instances_to_remove:
+                await self.stop_app(app_instance_name)
 
-                if app_instance_name in self.loaded_app_instances:
-                    if app_config != self.loaded_app_instances[app_instance_name]['config']:
-                        await self.stop_app(app_instance_name)
-                    else:
-                        continue
-
-                apps_to_load[app_instance_name] = app_config
-
-            app_instances_to_remove = []
-            for app_instance_name in self.loaded_app_instances:
-                if app_instance_name not in seen:
-                    app_instances_to_remove.append(app_instance_name)
-
-            for app_instance_name in app_instances_to_remove:
-                    await self.stop_app(app_instance_name)
-
-            for app_instance_name in apps_to_load:
-                app_config = apps_to_load[app_instance_name]
-                await self.start_app(app_instance_name, app_config)
+        for app_instance_name in apps_to_load:
+            app_config = apps_to_load[app_instance_name]
+            await self.start_app(app_instance_name, app_config)
 
     async def refresh_available_apps(self):
         available_apps = {}
@@ -223,22 +222,23 @@ class Manager():
             _LOGGER.debug('Loaded Module %s', app_name)
             _LOGGER.debug('MANIFEST %s %s', app_name, self.available_apps[app_name]['manifest'])
 
+        options = {}
+        if 'module_options' in app_manifest:
+            options = app_manifest['module_options'] 
+        app_config_copy = copy.deepcopy(app_config)
+        app_config_copy.pop('app')
+        app_config_copy.pop('name')
         try:
-            options = {}
-            if 'module_options' in app_manifest:
-                options = app_manifest['module_options'] 
-            app_config_copy = copy.deepcopy(app_config)
-            app_config_copy.pop('app')
-            app_config_copy.pop('name')
             this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config_copy, **options)
+        except AttributeError:
+            _LOGGER.error("%s doesn't have a Module class", app_name)
+        else:
             _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
             self.loaded_app_instances[app_instance_name] = {
                 "config": app_config,
                 "module": app_name,
                 "obj": this_obj
             }
-        except AttributeError:
-            _LOGGER.error("%s doesn't have a Module class", app_name)
 
         return True
 

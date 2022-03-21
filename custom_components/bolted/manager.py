@@ -12,7 +12,12 @@ from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 import yaml
 from homeassistant.requirements import async_process_requirements
-import copy 
+import copy
+from pydantic import BaseModel, Field, validator, ValidationError
+import datetime
+from typing import Optional, Dict, List
+from types import ModuleType
+from .types import HassApp
 
 from .const import (
     DOMAIN,
@@ -21,18 +26,41 @@ from .const import (
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
+class StrictBaseModel(BaseModel):
+    class Config:
+        extra = 'forbid'
+        validate_assignment = True
+        arbitrary_types_allowed = True
+
+class AppManifest(StrictBaseModel):
+    requirements: Optional[List[str]] = None
+    options: Optional[Dict] = None
+    
+class App(StrictBaseModel):
+    name: str
+    path: str
+    mtime: datetime.datetime
+    manifest: AppManifest
+    module: Optional[ModuleType] = None
+
+class AppInstance(StrictBaseModel):
+    name: str
+    app: App
+    instance: HassApp
+    config: Dict = {}
+
+
 class Manager():
 
     def __init__(self, hass: HomeAssistant):
-        self.hass = hass
-        self.available_apps: dict = {}
-        self.loaded_app_modules: dict = {}
-        self.loaded_app_instances: dict = {}
+        self.hass: HomeAssistant = hass
+        self.apps: Dict[str, App] = dict()
+        self.app_instances: Dict[str, AppInstance] = dict()
         
     async def stop_all(self):
         _LOGGER.debug('Stopping All Objects')
         apps_to_stop = []
-        for app_instance_name in self.loaded_app_instances:
+        for app_instance_name in self.app_instances:
             apps_to_stop.append(app_instance_name)
 
         for app_instance_name in apps_to_stop:
@@ -40,12 +68,12 @@ class Manager():
 
     async def stop_app(self, app_instance_name):
         try:
-            this_app = self.loaded_app_instances.pop(app_instance_name)
+            this_app = self.app_instances.pop(app_instance_name)
         except KeyError:
             _LOGGER.debug('Tried to Kill %s but it was not loaded', app_instance_name)
         else:
             _LOGGER.debug('Killing %s', app_instance_name)
-            this_app['obj'].shutdown()
+            this_app.instance.shutdown()
             del this_app
 
     async def reload(self):
@@ -76,8 +104,8 @@ class Manager():
             if app_name in reloaded_apps:
                 await self.stop_app(app_instance_name)
 
-            if app_instance_name in self.loaded_app_instances:
-                if app_config != self.loaded_app_instances[app_instance_name]['config']:
+            if app_instance_name in self.app_instances:
+                if app_config != self.app_instances[app_instance_name].config:
                     await self.stop_app(app_instance_name)
                 else:
                     continue
@@ -85,7 +113,7 @@ class Manager():
             apps_to_load[app_instance_name] = app_config
 
         app_instances_to_remove = []
-        for app_instance_name in self.loaded_app_instances:
+        for app_instance_name in self.app_instances:
             if app_instance_name not in seen:
                 app_instances_to_remove.append(app_instance_name)
 
@@ -97,7 +125,7 @@ class Manager():
             await self.start_app(app_instance_name, app_config)
 
     async def refresh_available_apps(self):
-        available_apps = {}
+        available_apps: Dict[str, App] = dict()
         modules_path = self.hass.config.path(FOLDER)
         for (dirpath, dirnames, filenames) in os.walk(modules_path):
             _LOGGER.debug("walking %s", dirpath)
@@ -107,15 +135,17 @@ class Manager():
                 app_name = module_path
                 app_name = app_name.replace('/', '.')
                 _LOGGER.debug('Found App Module app_name: %s, app_path: %s', app_name, app_path)
-                available_apps[app_name] = {}
-                available_apps[app_name]['path'] = app_path
-                available_apps[app_name]['mtime'] = os.path.getmtime(app_path)
+                app_manifest = {}
                 if "manifest.yaml" in filenames:
                     with open(dirpath + "/manifest.yaml", 'r') as stream:
                         data_loaded = yaml.safe_load(stream)
-                    available_apps[app_name]['manifest'] = data_loaded
-                else:
-                    available_apps[app_name]['manifest'] = {}
+                    app_manifest = data_loaded
+                available_apps[app_name] = App(
+                    name=app_name,
+                    path=app_path,
+                    mtime=os.path.getmtime(app_path),
+                    manifest=app_manifest,
+                )
                 dirnames = []
                 continue
 
@@ -130,10 +160,12 @@ class Manager():
                         app_name = module_path + '/' + app_name
                     app_name = app_name.replace('/','.')
                     _LOGGER.debug('Found App app_name: %s, app_path: %s', app_name, app_path)
-                    available_apps[app_name] = {}
-                    available_apps[app_name]['path'] = app_path
-                    available_apps[app_name]['mtime'] = os.path.getmtime(app_path)
-                    available_apps[app_name]['manifest'] = {}
+                    available_apps[app_name] = App(
+                        name=app_name,
+                        path=app_path,
+                        mtime=os.path.getmtime(app_path),
+                        manifest={}
+                    )
 
             dirs_to_remove = []
             bad_dirs = [
@@ -151,26 +183,24 @@ class Manager():
                 dirnames.remove(dir)
 
         apps_to_remove = []
-        for app in self.available_apps:
+        for app in self.apps:
             if app not in available_apps:
                 _LOGGER.debug('App No Longer Available: %s', app)
                 apps_to_remove.append(app)
                 continue
 
-            if self.available_apps[app]['mtime'] != available_apps[app]['mtime']:
+            if self.apps[app].mtime != available_apps[app].mtime:
                 _LOGGER.debug('App Has Changed: %s', app)
                 apps_to_remove.append(app)
                 continue
 
         for app in apps_to_remove:
-            del self.available_apps[app]
-            if app in self.loaded_app_modules:
-                del self.loaded_app_modules[app]
+            del self.apps[app]
 
         for app in available_apps:
-            self.available_apps[app] = available_apps[app]
+            self.apps[app] = available_apps[app]
 
-        _LOGGER.debug('Available Apps %s', self.available_apps)
+        _LOGGER.debug('Available Apps %s', self.apps)
 
         return apps_to_remove
 
@@ -195,20 +225,20 @@ class Manager():
 
         app_name = app_config['app']
 
-        if app_name not in self.available_apps:
+        if app_name not in self.apps:
             _LOGGER.error('app "%s" is not valid', app_name)
             return None
 
-        app_manifest = self.available_apps[app_name]['manifest']
+        this_app = self.apps[app_name]
 
-        if app_name not in self.loaded_app_modules:
-            if 'requirements' in app_manifest and app_manifest['requirements'] is not None:
-                _LOGGER.debug('Installing Requirements for %s: %s', app_name, app_manifest['requirements'])
-                await async_process_requirements(self.hass, f"{DOMAIN}.{app_name}", app_manifest['requirements'])
+        if this_app.module is None:
+            if this_app.manifest.requirements is not None:
+                _LOGGER.debug('Installing Requirements for %s: %s', app_name, this_app.manifest.requirements)
+                await async_process_requirements(self.hass, f"{DOMAIN}.{app_name}", this_app.manifest.requirements)
             
             this_module_spec = importlib.util.spec_from_file_location(
                 app_name,
-                self.available_apps[app_name]['path']
+                this_app.path
             )
 
             loading_module = importlib.util.module_from_spec(this_module_spec)
@@ -218,27 +248,28 @@ class Manager():
                 _LOGGER.error("Exception loading %s", app_name)
                 _LOGGER.exception(e)
                 return None
-            self.loaded_app_modules[app_name] = loading_module
+            this_app.module = loading_module
             _LOGGER.debug('Loaded Module %s', app_name)
-            _LOGGER.debug('MANIFEST %s %s', app_name, self.available_apps[app_name]['manifest'])
+            _LOGGER.debug('MANIFEST %s %s', app_name, this_app.manifest)
 
         options = {}
-        if 'module_options' in app_manifest:
-            options = app_manifest['module_options'] 
+        if this_app.manifest.options is not None:
+            options = this_app.manifest.options
         app_config_copy = copy.deepcopy(app_config)
         app_config_copy.pop('app')
         app_config_copy.pop('name')
         try:
-            this_obj = self.loaded_app_modules[app_name].Module(self.hass, app_instance_name, app_config_copy, **options)
+            this_obj = this_app.module.Module(self.hass, app_instance_name, app_config_copy, **options)
         except AttributeError:
             _LOGGER.error("%s doesn't have a Module class", app_name)
         else:
             _LOGGER.debug('Created App Instance %s: %s', app_instance_name, this_obj)
-            self.loaded_app_instances[app_instance_name] = {
-                "config": app_config,
-                "module": app_name,
-                "obj": this_obj
-            }
+            self.app_instances[app_instance_name] = AppInstance(
+                name=app_instance_name,
+                app=this_app,
+                instance=this_obj,
+                config=app_config,
+            )
 
         return True
 

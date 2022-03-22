@@ -18,6 +18,7 @@ import datetime
 from typing import Optional, Dict, List
 from types import ModuleType
 from .types import BoltedApp
+from .helpers import time_it
 
 from .const import (
     DOMAIN,
@@ -59,6 +60,7 @@ class Manager:
         self.hass: HomeAssistant = hass
         self.apps: Dict[str, App] = dict()
         self.app_instances: Dict[str, AppInstance] = dict()
+        self.manifest_cache: Dict[str, AppManifest] = dict()
 
     async def stop_all(self):
         _LOGGER.debug("Stopping All Objects")
@@ -80,6 +82,41 @@ class Manager:
             _LOGGER.debug("Killing %s", app_instance_name)
             this_app.instance.shutdown()
             del this_app
+
+    def get_manifest(self, filename):
+        if filename in self.manifest_cache:
+            return self.manifest_cache[filename]
+
+        try:
+            with open(filename, "r") as stream:
+                data_loaded = yaml.safe_load(stream)
+        except FileNotFoundError:
+            data_loaded = {}
+        app_manifest = AppManifest(**data_loaded)
+        self.manifest_cache[filename] = app_manifest
+        return app_manifest
+
+    def get_app(self, dirpath: str, filename: str, root_path: str):
+        apppath = dirpath + "/" + filename
+        appdir = dirpath[len(root_path) + 1:]
+        if filename == "__init__.py":
+            appname = appdir
+        else:
+            appname = filename[0:-3]
+            if len(appdir) != 0:
+                appname = appdir + "/" + appname
+        appname = appname.replace("/", ".")
+        _LOGGER.debug(
+            "Found App %s at %s",
+            appname,
+            apppath,
+        )
+        return App(
+            name=appname,
+            path=apppath,
+            mtime=os.path.getmtime(apppath),
+            manifest=self.get_manifest(dirpath + "/manifest.yaml"),
+        )
 
     async def reload(self):
         _LOGGER.debug("@reload")
@@ -135,31 +172,14 @@ class Manager:
             await self.start_app(app_instance_name, app_config)
 
     async def refresh_available_apps(self):
+        self.manifest_cache.clear()
         available_apps: Dict[str, App] = dict()
         modules_path = self.hass.config.path(APP_DIR)
         for (dirpath, dirnames, filenames) in os.walk(modules_path):
             _LOGGER.debug("walking %s", dirpath)
             if "__init__.py" in filenames:
-                module_path = dirpath[len(modules_path) + 1:]
-                app_path = dirpath + "/" + "__init__.py"
-                app_name = module_path
-                app_name = app_name.replace("/", ".")
-                _LOGGER.debug(
-                    "Found App Module app_name: %s, app_path: %s",
-                    app_name,
-                    app_path,
-                )
-                app_manifest = {}
-                if "manifest.yaml" in filenames:
-                    with open(dirpath + "/manifest.yaml", "r") as stream:
-                        data_loaded = yaml.safe_load(stream)
-                    app_manifest = data_loaded
-                available_apps[app_name] = App(
-                    name=app_name,
-                    path=app_path,
-                    mtime=os.path.getmtime(app_path),
-                    manifest=app_manifest,
-                )
+                this_app = self.get_app(dirpath, "__init__.py", modules_path)
+                available_apps[this_app.name] = this_app
                 dirnames = []
                 continue
 
@@ -167,23 +187,8 @@ class Manager:
                 if this_file[0] == "#":
                     continue
                 if this_file[-3:] == ".py":
-                    module_path = dirpath[len(modules_path) + 1:]
-                    app_path = dirpath + "/" + this_file
-                    app_name = this_file[0:-3]
-                    if len(module_path) != 0:
-                        app_name = module_path + "/" + app_name
-                    app_name = app_name.replace("/", ".")
-                    _LOGGER.debug(
-                        "Found App app_name: %s, app_path: %s",
-                        app_name,
-                        app_path,
-                    )
-                    available_apps[app_name] = App(
-                        name=app_name,
-                        path=app_path,
-                        mtime=os.path.getmtime(app_path),
-                        manifest={},
-                    )
+                    this_app = self.get_app(dirpath, this_file, modules_path)
+                    available_apps[this_app.name] = this_app
 
             dirs_to_remove = []
             bad_dirs = ["__pycache__"]
@@ -216,7 +221,7 @@ class Manager:
         for app in available_apps:
             self.apps[app] = available_apps[app]
 
-        _LOGGER.debug("Available Apps %s", self.apps)
+        _LOGGER.debug("Available Apps %s", self.apps.keys())
 
         return apps_to_remove
 
@@ -255,11 +260,20 @@ class Manager:
                     app_name,
                     this_app.manifest.requirements,
                 )
-                await async_process_requirements(
-                    self.hass,
-                    f"{DOMAIN}.{app_name}",
-                    this_app.manifest.requirements,
-                )
+                _time_requirements = time_it()
+                try:
+                    await async_process_requirements(
+                        self.hass,
+                        f"{DOMAIN}.{app_name}",
+                        this_app.manifest.requirements,
+                    )
+                except Exception as e:
+                    _LOGGER.error(
+                        "Exception loading requirements for %s", app_name
+                    )
+                    _LOGGER.exception(e)
+                    return None
+                _LOGGER.debug("Requirements took %s", _time_requirements())
 
             this_module_spec = importlib.util.spec_from_file_location(
                 app_name, this_app.path

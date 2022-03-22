@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import datetime
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -33,3 +34,14 @@ class ObservableVariable:
 
     def wait_cb(self, cb):
         self._callbacks.add(cb)
+
+
+def time_it():
+    start_time = datetime.datetime.now()
+
+    def elapsed():
+        now_time = datetime.datetime.now()
+        elapsed = now_time - start_time
+        return elapsed
+
+    return elapsed

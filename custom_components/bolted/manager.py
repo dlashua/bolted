@@ -1,29 +1,27 @@
 """
 Manager for Bolted
 """
+import copy
+import datetime
+import importlib.util
 import logging
-from homeassistant.core import HomeAssistant
+import os
+from types import ModuleType
+from typing import Dict, List, Optional
+
+import yaml
 from homeassistant import config as conf_util
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
-import os
-import importlib.util
+from homeassistant.requirements import async_process_requirements
+from pydantic import BaseModel
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
-import yaml
-from homeassistant.requirements import async_process_requirements
-import copy
-from pydantic import BaseModel
-import datetime
-from typing import Optional, Dict, List
-from types import ModuleType
-from .types import BoltedApp
-from .helpers import time_it
 
-from .const import (
-    DOMAIN,
-    APP_DIR,
-)
+from .const import APP_DIR, DOMAIN
+from .helpers import time_it
+from .types import BoltedApp
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 

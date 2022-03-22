@@ -1,7 +1,9 @@
 """Bolted Binary Sensor Entity"""
-from .entity_manager import EntityManager, BoltedEntity
-from homeassistant.components.binary_sensor import BinarySensorEntity
 from typing import Optional
+
+from homeassistant.components.binary_sensor import BinarySensorEntity
+
+from .entity_manager import BoltedEntity, EntityManager
 
 PLATFORM = "binary_sensor"
 

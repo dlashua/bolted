@@ -5,18 +5,13 @@ For more details about this integration, please refer to
 https://github.com/dlashua/bolted
 """
 import logging
+
 from homeassistant.core import HomeAssistant
-from .manager import Manager
+from homeassistant.helpers import discovery
+
+from .const import DOMAIN, SERVICE_RELOAD
 from .entity_manager import EntityManager
-
-from .const import (
-    DOMAIN,
-    SERVICE_RELOAD,
-)
-
-from homeassistant.helpers import (
-    discovery,
-)
+from .manager import Manager
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 

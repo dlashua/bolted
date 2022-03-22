@@ -1,7 +1,9 @@
 """Bolted Switch Entity"""
-from .entity_manager import EntityManager, BoltedEntity
-from homeassistant.helpers.entity import ToggleEntity
 from typing import Optional
+
+from homeassistant.helpers.entity import ToggleEntity
+
+from .entity_manager import BoltedEntity, EntityManager
 from .types import call_or_await
 
 PLATFORM = "switch"
@@ -41,10 +43,12 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
         if callable(self._turn_on_handler):
             await call_or_await(self._turn_on_handler, **kwargs)
         else:
-            raise RuntimeError((
-                f"Unable to Call turn_on_handler of type"
-                f" {type(self._turn_on_handler)}"
-            ))
+            raise RuntimeError(
+                (
+                    f"Unable to Call turn_on_handler of type"
+                    f" {type(self._turn_on_handler)}"
+                )
+            )
 
     async def async_turn_off(self, **kwargs):
         """Handle turn_off request."""
@@ -54,10 +58,12 @@ class BoltedSwitch(BoltedEntity, ToggleEntity):
         if callable(self._turn_off_handler):
             await call_or_await(self._turn_off_handler, **kwargs)
         else:
-            raise RuntimeError((
-                f"Unable to Call turn_off_handler of type"
-                f" {type(self._turn_off_handler)}"
-            ))
+            raise RuntimeError(
+                (
+                    f"Unable to Call turn_off_handler of type"
+                    f" {type(self._turn_off_handler)}"
+                )
+            )
 
     # USED IN BOLTED APPS
     ######################################

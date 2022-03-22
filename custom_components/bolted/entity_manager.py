@@ -1,15 +1,17 @@
 """Bolted Entity Manager"""
 import logging
-from typing import Optional, Any
 from collections.abc import Mapping, MutableMapping
-from homeassistant.helpers.restore_state import RestoreEntity
-from .helpers import ObservableVariable
+from typing import Any, Optional
+
+import homeassistant.helpers.device_registry as hass_device_registry
+import homeassistant.helpers.entity_registry as hass_entity_registry
 from homeassistant.helpers.restore_state import (
     ExtraStoredData,
     RestoredExtraData,
+    RestoreEntity,
 )
-import homeassistant.helpers.entity_registry as hass_entity_registry
-import homeassistant.helpers.device_registry as hass_device_registry
+
+from .helpers import ObservableVariable
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 

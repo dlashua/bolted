@@ -1,14 +1,15 @@
 import abc
 import asyncio
+from collections import OrderedDict
 import datetime
+from functools import wraps
 import inspect
 import io
 import logging
-from collections import OrderedDict
-from functools import wraps
 
 import pendulum
 import yaml
+
 from homeassistant.components.device_automation.trigger import (
     async_attach_trigger as async_attach_device_automation_trigger,
 )

@@ -1,6 +1,6 @@
 """Bolted Entity Manager"""
-import logging
 from collections.abc import Mapping, MutableMapping
+import logging
 from typing import Any, Optional
 
 import homeassistant.helpers.device_registry as hass_device_registry

@@ -298,12 +298,20 @@ class Manager:
 
         event_handler = EventHandler(["*.py", "*.yaml"], reload_action)
         self._observer = Observer()
-        self._observer.schedule(
-            event_handler, self.hass.config.path(APP_DIR), recursive=True
-        )
-        self._observer.schedule(
-            event_handler, self.hass.config.path(SCRIPT_DIR), recursive=True
-        )
+        if os.path.exists(APP_DIR):
+            self._observer.schedule(
+                event_handler, self.hass.config.path(APP_DIR), recursive=True
+            )
+        else:
+            _LOGGER.warn('Apps Directory does not exist: %s', APP_DIR)
+        
+        if os.path.exists(SCRIPT_DIR):
+            self._observer.schedule(
+                event_handler, self.hass.config.path(SCRIPT_DIR), recursive=True
+            )
+        else:
+            _LOGGER.warn('Scripts Directory does not exist: %s', SCRIPT_DIR)
+
         self._observer.start()
         return True
 

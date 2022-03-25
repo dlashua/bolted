@@ -20,7 +20,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
 from homeassistant.requirements import async_process_requirements
 
-from .const import APP_DIR, DOMAIN, SCRIPT_DIR, BASE_DIR, CONFIG_DIR
+from .const import APP_DIR, DOMAIN, SCRIPT_DIR, CONFIG_DIR
 from .helpers import time_it
 from .types import BoltedApp, BoltedScript
 
@@ -299,29 +299,27 @@ class Manager:
         yaml_event_handler = EventHandler(["*.yaml"], reload_action)
         py_event_handler = EventHandler(["*.py"], reload_action)
         self._observer = Observer()
-        app_dir_full = [BASE_DIR, APP_DIR].join('/')
-        if os.path.exists(app_dir_full):
-            self._observer.schedule(
-                py_event_handler, self.hass.config.path(app_dir_full), recursive=True
-            )
-        else:
-            _LOGGER.warn('Apps Directory does not exist: %s', app_dir_full)
-        
-        script_dir_full = [BASE_DIR, SCRIPT_DIR].join('/')
-        if os.path.exists(script_dir_full):
-            self._observer.schedule(
-                py_event_handler, self.hass.config.path(script_dir_full), recursive=True
-            )
-        else:
-            _LOGGER.warn('Scripts Directory does not exist: %s', script_dir_full)
 
-        config_dir_full = [BASE_DIR, CONFIG_DIR].join('/')
-        if os.path.exists(config_dir_full):
+        if os.path.exists(APP_DIR):
             self._observer.schedule(
-                yaml_event_handler, self.hass.config.path(config_dir_full), recursive=False
+                py_event_handler, self.hass.config.path(APP_DIR), recursive=True
             )
         else:
-            _LOGGER.warn('Config Directory does not exist: %s', config_dir_full)
+            _LOGGER.warn('Apps Directory does not exist: %s', APP_DIR)
+        
+        if os.path.exists(SCRIPT_DIR):
+            self._observer.schedule(
+                py_event_handler, self.hass.config.path(SCRIPT_DIR), recursive=True
+            )
+        else:
+            _LOGGER.warn('Scripts Directory does not exist: %s', SCRIPT_DIR)
+
+        if os.path.exists(CONFIG_DIR):
+            self._observer.schedule(
+                yaml_event_handler, self.hass.config.path(CONFIG_DIR), recursive=False
+            )
+        else:
+            _LOGGER.warn('Config Directory does not exist: %s', CONFIG_DIR)
 
 
         self._observer.start()

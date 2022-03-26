@@ -115,6 +115,13 @@ class BoltedBase(metaclass=abc.ABCMeta):
             f".{self._get_logger_name()}"
             f".{self.__module__}.{self.name}"
         )
+
+        if 'log_level' in self.config:
+            self.call_service(
+                'logger', 'set_level',
+                **{self._logging_name: self.config.pop('log_level')}
+            )
+
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []
         self._registered_services = set()

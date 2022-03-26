@@ -147,20 +147,25 @@ class BoltedBase(metaclass=abc.ABCMeta):
     @staticmethod
     def debounce(time):
         def deco_debounce(func):
-            handle = None
+            handles = {}
 
             @wraps(func)
             def inner_debounce(self, *args, **kwargs):
-                nonlocal handle
-                if handle is not None:
-                    handle()
+                nonlocal handles
+                if self in handles:
+                    self.logger.debug('cancelling %s', handles[self])
+                    handles[self]()
+
 
                 def remove_handle_and_run():
-                    nonlocal handle
-                    handle = None
+                    nonlocal handles
+                    nonlocal self
+                    if self in handles:
+                        del handles[self]
+
                     func(self, *args, **kwargs)
 
-                handle = self.run_in(time, remove_handle_and_run)
+                handles[self] = self.run_in(time, remove_handle_and_run)
 
             return inner_debounce
 

@@ -6,6 +6,7 @@ from functools import wraps
 import inspect
 import io
 import logging
+from typing import Dict, Callable
 
 import pendulum
 import yaml
@@ -152,17 +153,13 @@ class BoltedBase(metaclass=abc.ABCMeta):
         return EntityManager.get_device_by_entity_id(entity_id)
 
     @staticmethod
-    def debounce(time):
-        def deco_debounce(func):
-            handles = {}
+    def debounce(seconds: float):
+        def deco_debounce(func: Callable):
+            handles: Dict[BoltedBase, Callable] = {}
 
             @wraps(func)
-            def inner_debounce(self, *args, **kwargs):
+            def inner_debounce(self: BoltedBase, *args, **kwargs):
                 nonlocal handles
-                if self in handles:
-                    self.logger.debug('cancelling %s', handles[self])
-                    handles[self]()
-
 
                 def remove_handle_and_run():
                     nonlocal handles
@@ -172,11 +169,15 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
                     func(self, *args, **kwargs)
 
-                handles[self] = self.run_in(time, remove_handle_and_run)
+                if self in handles:
+                    self.logger.debug('cancelling %s', handles[self])
+                    handles[self]()
+
+                handles[self] = self.run_in(seconds, remove_handle_and_run)
 
             return inner_debounce
-
         return deco_debounce
+
 
     async def _startup(self, _=None):
         if self._automation_switch is True:

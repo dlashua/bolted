@@ -378,6 +378,80 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
     listen_template_func = make_cb_decorator(listen_template)
 
+    def listen_state_value(self, entity_id, cb, **orig_kwargs):
+        matched_cb = match_sig(cb)
+
+        def inner_cb(new_state, old_state, **kwargs):
+            force_report = False
+
+            result = None
+            if new_state is not None:
+                result = new_state.state
+            else:
+                force_report = True
+            
+            last_result = None
+            if old_state is not None:
+                last_result = old_state.state
+            else:
+                force_report = True
+
+            if result == last_result and force_report is not False:
+                return
+
+            kwargs.update(
+                dict(
+                    result=result,
+                    last_result=last_result,
+                )
+            )
+
+            self.call_or_add_job(matched_cb, **kwargs)
+
+        self.listen_state(
+            entity_id=entity_id,
+            cb=inner_cb,
+            **orig_kwargs
+        )
+
+    def listen_state_attr(self, entity_id, attr, cb, **orig_kwargs):
+        matched_cb = match_sig(cb)
+
+        def inner_cb(new_state, old_state, **kwargs):
+            force_report = False
+
+            result = None
+            if new_state is not None:
+                if attr in new_state.attributes:
+                    result = new_state.attributes[attr]
+            else:
+                force_report = True
+            
+            last_result = None
+            if old_state is not None:
+                if attr in old_state.attributes:
+                    last_result = old_state.attributes[attr]
+            else:
+                force_report = True
+
+            if result == last_result and force_report is not True:
+                return
+
+            kwargs.update(
+                dict(
+                    result=result,
+                    last_result=last_result,
+                )
+            )
+
+            self.call_or_add_job(matched_cb, **kwargs)
+
+        self.listen_state(
+            entity_id=entity_id,
+            cb=inner_cb,
+            **orig_kwargs
+        )     
+
     def listen_state(self, entity_id, cb, trigger_now=False, **listen_kwargs):
         matched_cb = match_sig(cb)
 

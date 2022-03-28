@@ -80,7 +80,6 @@ def get_kwargs_for_match_sig(func_params, kwargs):
             if key in kwargs:
                 kwargs_to_send[key] = kwargs.pop(key)
             else:
-                _LOGGER.warn("unknown argument %s in %s", key, func)
                 kwargs_to_send[key] = None
     
     return kwargs_to_send
@@ -171,6 +170,39 @@ class BoltedBase(metaclass=abc.ABCMeta):
         _cancel_listen = self.listen_template(
             template, cb=inner_cb, trigger_now=True
         )
+        try:
+            async with async_timeout.timeout(timeout):
+                await _done.wait()
+            return True
+        except asyncio.TimeoutError as ex:
+            return False
+        finally:
+            _cancel_listen()
+
+    async def wait_state(self, entity_id, value, timeout=None):
+        _done = asyncio.Event()
+
+        def inner_cb(new_state):
+            if new_state.state == value:
+                _done.set()
+
+        _cancel_listen = self.listen_state(entity_id, cb=inner_cb, trigger_now=True)
+        try:
+            async with async_timeout.timeout(timeout):
+                await _done.wait()
+            return True
+        except asyncio.TimeoutError as ex:
+            return False
+        finally:
+            _cancel_listen()
+
+    async def wait_event(self, event_type, filter={}, timeout=None):
+        _done = asyncio.Event()
+
+        def inner_cb():
+            _done.set()
+
+        _cancel_listen = self.listen_event(event_type, cb=inner_cb, filter=filter)
         try:
             async with async_timeout.timeout(timeout):
                 await _done.wait()
@@ -463,7 +495,10 @@ class BoltedBase(metaclass=abc.ABCMeta):
         while self.listeners:
             this_listener = self.listeners.pop()
             self.logger.debug("Killing %s", this_listener)
-            this_listener()
+            try:
+                this_listener()
+            except KeyError:
+                pass
 
         while self._registered_services:
             this_service = self._registered_services.pop()

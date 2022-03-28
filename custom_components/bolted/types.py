@@ -6,7 +6,7 @@ from functools import wraps
 import inspect
 import io
 import logging
-from typing import Dict, Callable
+from typing import Callable, Dict
 
 import pendulum
 import yaml
@@ -23,7 +23,7 @@ from homeassistant.helpers.event import (
     async_track_template_result,
 )
 from homeassistant.helpers.service import async_set_service_schema
-from homeassistant.helpers.template import Template
+from homeassistant.helpers.template import Template, is_template_string
 
 from .const import DOMAIN
 from .entity_manager import EntityManager
@@ -117,10 +117,11 @@ class BoltedBase(metaclass=abc.ABCMeta):
             f".{self.__module__}.{self.name}"
         )
 
-        if 'log_level' in self.config:
+        if "log_level" in self.config:
             self.call_service(
-                'logger', 'set_level',
-                **{self._logging_name: self.config.pop('log_level')}
+                "logger",
+                "set_level",
+                **{self._logging_name: self.config.pop("log_level")},
             )
 
         self.logger = logging.getLogger(self._logging_name)
@@ -152,6 +153,9 @@ class BoltedBase(metaclass=abc.ABCMeta):
     def get_device_by_entity_id(self, entity_id):
         return EntityManager.get_device_by_entity_id(entity_id)
 
+    def is_template(self, template):
+        return is_template_string(template)
+
     @staticmethod
     def debounce(seconds: float):
         def deco_debounce(func: Callable):
@@ -170,14 +174,14 @@ class BoltedBase(metaclass=abc.ABCMeta):
                     func(self, *args, **kwargs)
 
                 if self in handles:
-                    self.logger.debug('cancelling %s', handles[self])
+                    self.logger.debug("cancelling %s", handles[self])
                     handles[self]()
 
                 handles[self] = self.run_in(seconds, remove_handle_and_run)
 
             return inner_debounce
-        return deco_debounce
 
+        return deco_debounce
 
     async def _startup(self, _=None):
         if self._automation_switch is True:

@@ -1,5 +1,6 @@
 import abc
 import asyncio
+from asyncio import Event
 from collections import OrderedDict
 import datetime
 from functools import wraps
@@ -8,6 +9,7 @@ import io
 import logging
 from typing import Callable, Dict
 
+import async_timeout
 import pendulum
 import yaml
 
@@ -156,6 +158,25 @@ class BoltedBase(metaclass=abc.ABCMeta):
     def is_template(self, template):
         return is_template_string(template)
 
+    async def wait_template(self, template, timeout=None):
+        _done = asyncio.Event()
+
+        def inner_cb(result):
+            if result is True:
+                _done.set()
+
+        _cancel_listen = self.listen_template(
+            template, cb=inner_cb, trigger_now=True
+        )
+        try:
+            async with async_timeout.timeout(timeout):
+                await _done.wait()
+            return True
+        except asyncio.TimeoutError as ex:
+            return False
+        finally:
+            _cancel_listen()
+
     @staticmethod
     def debounce(seconds: float):
         def deco_debounce(func: Callable):
@@ -165,13 +186,13 @@ class BoltedBase(metaclass=abc.ABCMeta):
             def inner_debounce(self: BoltedBase, *args, **kwargs):
                 nonlocal handles
 
-                def remove_handle_and_run():
+                async def remove_handle_and_run():
                     nonlocal handles
                     nonlocal self
                     if self in handles:
                         del handles[self]
 
-                    func(self, *args, **kwargs)
+                    await call_or_await(func, self, *args, **kwargs)
 
                 if self in handles:
                     self.logger.debug("cancelling %s", handles[self])
@@ -322,7 +343,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         @callback
         @wraps(cb)
-        def inner_cb(event):
+        async def inner_cb(event):
             self.logger.debug("listen_state event: %s", event)
             kwargs = listen_kwargs.copy()
             kwargs.update(
@@ -333,7 +354,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 )
             )
 
-            matched_cb(**kwargs)
+            await call_or_await(matched_cb, **kwargs)
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)

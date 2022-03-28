@@ -369,7 +369,12 @@ class BoltedBase(metaclass=abc.ABCMeta):
         if trigger_now is True:
             inner_cb(event=None, template_result=[template.async_render()])
 
-        return info.async_remove
+        def cancel_and_remove():
+            if info.async_remove in self.listeners:
+                self.listeners.remove(info.async_remove)
+                info.async_remove()
+
+        return cancel_and_remove
 
     listen_template_func = make_cb_decorator(listen_template)
 
@@ -393,6 +398,10 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)
+        def cancel_and_remove():
+            if handle in self.listeners:
+                self.listeners.remove(handle)
+                handle()
 
         if trigger_now is True:
             state = self.state_get(entity_id)
@@ -406,7 +415,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
             )
             self.call_or_add_job(matched_cb, **kwargs)
 
-        return handle
+        return cancel_and_remove
 
     listen_state_func = make_cb_decorator(listen_state)
 
@@ -416,9 +425,10 @@ class BoltedBase(metaclass=abc.ABCMeta):
         @callback
         @wraps(cb)
         def inner_cb(event):
-            self.logger.debug("listen_event event: %s", event)
             if not recursive_match(filter, event.data):
+                self.logger.debug("listen_event event NO MATCH: %s", event)
                 return
+            self.logger.debug("listen_event event: %s", event)
             kwargs.update(
                 dict(
                     event_type=event.event_type,
@@ -430,8 +440,12 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         handle = self.hass.bus.async_listen(event_type, inner_cb)
         self.listeners.append(handle)
+        def cancel_and_remove():
+            if handle in self.listeners:
+                self.listeners.remove(handle)
+                handle()
 
-        return handle
+        return cancel_and_remove
 
     listen_event_func = make_cb_decorator(listen_event)
 

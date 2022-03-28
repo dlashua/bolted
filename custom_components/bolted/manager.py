@@ -180,9 +180,13 @@ class Manager:
 
     async def reload_apps(self, bolted):
         try:
-            apps_config = bolted.get("apps", None)
+            apps_config = bolted.get("apps", [])
         except AttributeError:
             apps_config = []
+
+        if apps_config is None:
+            apps_config = []
+
         available_apps = await self.get_available_bolts(APP_DIR)
 
         apps_to_remove = []

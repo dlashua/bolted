@@ -69,6 +69,12 @@ class Manager:
         self.script_instances: Dict[str, ScriptInstance] = dict()
         self.manifest_cache: Dict[str, BoltedManifest] = dict()
 
+    async def shutdown(self):
+        _LOGGER.info('Shutting Down')
+        _LOGGER.info('Stopping All Apps')
+        await self.stop_all()
+        self._observer.stop()
+
     async def stop_all(self):
         _LOGGER.debug("Stopping All Objects")
         apps_to_stop = []
@@ -93,7 +99,7 @@ class Manager:
                 "Tried to Kill Bolt App %s but it was not loaded", app_instance_name
             )
         else:
-            _LOGGER.debug("Killing Bolt App %s", app_instance_name)
+            _LOGGER.info("Killing Bolt App %s", app_instance_name)
             this_app.instance.shutdown()
             del this_app
 
@@ -105,7 +111,7 @@ class Manager:
                 "Tried to Kill Bolt Script %s but it was not loaded", script_instance_name
             )
         else:
-            _LOGGER.debug("Killing Bolt Script %s", script_instance_name)
+            _LOGGER.info("Killing Bolt Script %s", script_instance_name)
             this_script.instance.shutdown()
             del this_script
 
@@ -408,7 +414,7 @@ class Manager:
 
         if this_app.module is None:
             if this_app.manifest.requirements is not None:
-                _LOGGER.debug(
+                _LOGGER.info(
                     "Installing Requirements for %s: %s",
                     app_name,
                     this_app.manifest.requirements,
@@ -440,7 +446,7 @@ class Manager:
                 _LOGGER.exception(e)
                 return None
             this_app.module = loading_module
-            _LOGGER.debug("Loaded Module %s", app_name)
+            _LOGGER.info("Loaded Module %s", app_name)
             _LOGGER.debug("MANIFEST %s %s", app_name, this_app.manifest)
 
         options = {}
@@ -456,8 +462,8 @@ class Manager:
         except AttributeError:
             _LOGGER.error("%s doesn't have an 'App' class", app_name)
         else:
-            _LOGGER.debug(
-                "Created Bolt App Instance %s: %s", app_instance_name, this_obj
+            _LOGGER.info(
+                "Created Bolt App Instance %s", app_instance_name
             )
             self.app_instances[app_instance_name] = AppInstance(
                 name=app_instance_name,

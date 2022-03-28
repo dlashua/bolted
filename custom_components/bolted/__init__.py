@@ -6,6 +6,7 @@ https://github.com/dlashua/bolted
 """
 import logging
 
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import discovery
 
@@ -25,6 +26,8 @@ async def async_setup(hass: HomeAssistant, _hass_config) -> bool:
     _LOGGER.debug("@async_setup")
 
     manager = Manager(hass)
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, manager.shutdown)
 
     async def reload_handler(_) -> None:
         return await manager.reload()

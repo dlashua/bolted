@@ -52,26 +52,25 @@ def recursive_match(search, source):
 
 
 def match_sig(func):
-    func_params = []
-    func_signature = inspect.signature(func)
-    for param in func_signature.parameters:
-        func_params.append(param)
-
     if asyncio.iscoroutinefunction(func):
         @wraps(func)
         async def inner_match_sig(**kwargs):
-            kwargs_to_send = get_kwargs_for_match_sig(func_params, kwargs)
+            kwargs_to_send = get_kwargs_for_match_sig(func, kwargs)
             return await func(**kwargs_to_send)
     else:
         @wraps(func)
         def inner_match_sig(**kwargs):
-            kwargs_to_send = get_kwargs_for_match_sig(func_params, kwargs)
+            kwargs_to_send = get_kwargs_for_match_sig(func, kwargs)
             return func(**kwargs_to_send)
 
     return inner_match_sig
 
 
-def get_kwargs_for_match_sig(func_params, kwargs):
+def get_kwargs_for_match_sig(func, kwargs):
+    func_params = []
+    func_signature = inspect.signature(func)
+    for param in func_signature.parameters:
+        func_params.append(param)
     if "kwargs" in func_params:
         kwargs_to_send = kwargs
     else:
@@ -80,6 +79,7 @@ def get_kwargs_for_match_sig(func_params, kwargs):
             if key in kwargs:
                 kwargs_to_send[key] = kwargs.pop(key)
             else:
+                _LOGGER.warning("key '%s' not an available data parameter for %s", key, func)
                 kwargs_to_send[key] = None
     
     return kwargs_to_send

@@ -51,42 +51,39 @@ def recursive_match(search, source):
     return True
 
 
-# def match_sig(func):
-#     func_params = []
-#     func_signature = inspect.signature(func)
-
-#     @wraps(func)
-#     def inner_match_sig(**kwargs):
-#         bound_arguments = func_signature.bind(**kwargs)
-
-#         return func(*bound_arguments.args, **bound_arguments.kwargs)
-
-#     return inner_match_sig
-
-
 def match_sig(func):
     func_params = []
     func_signature = inspect.signature(func)
     for param in func_signature.parameters:
         func_params.append(param)
 
-    @wraps(func)
-    def inner_match_sig(**kwargs):
-        if "kwargs" in func_params:
-            kwargs_to_send = kwargs
-        else:
-            kwargs_to_send = {}
-            for key in func_params:
-                if key in kwargs:
-                    kwargs_to_send[key] = kwargs.pop(key)
-                else:
-                    _LOGGER.warn("unknown argument %s in %s", key, func)
-                    kwargs_to_send[key] = None
-
-        return func(**kwargs_to_send)
+    if asyncio.iscoroutinefunction(func):
+        @wraps(func)
+        async def inner_match_sig(**kwargs):
+            kwargs_to_send = get_kwargs_for_match_sig(func_params, kwargs)
+            return await func(**kwargs_to_send)
+    else:
+        @wraps(func)
+        def inner_match_sig(**kwargs):
+            kwargs_to_send = get_kwargs_for_match_sig(func_params, kwargs)
+            return func(**kwargs_to_send)
 
     return inner_match_sig
 
+
+def get_kwargs_for_match_sig(func_params, kwargs):
+    if "kwargs" in func_params:
+        kwargs_to_send = kwargs
+    else:
+        kwargs_to_send = {}
+        for key in func_params:
+            if key in kwargs:
+                kwargs_to_send[key] = kwargs.pop(key)
+            else:
+                _LOGGER.warn("unknown argument %s in %s", key, func)
+                kwargs_to_send[key] = None
+    
+    return kwargs_to_send
 
 def make_cb_decorator(orig_func):
     def inner_cb_decorator(*args, **kwargs):
@@ -103,7 +100,7 @@ async def call_or_await(cb, *args, **kwargs):
     if asyncio.iscoroutinefunction(cb):
         await cb(*args, **kwargs)
     else:
-        cb(*args, **kwargs)
+        return cb(*args, **kwargs)
 
 
 class BoltedBase(metaclass=abc.ABCMeta):
@@ -139,6 +136,12 @@ class BoltedBase(metaclass=abc.ABCMeta):
             self.hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_START, self._startup
             )
+
+    def call_or_add_job(self, func, *args, **kwargs):
+        if asyncio.iscoroutinefunction(func):
+            self.add_job(func(*args, **kwargs))
+        else:
+            func(*args, **kwargs)
 
     async def get_entity(self, platform, name, **kwargs):
         this_entity = await EntityManager.get(self, platform, name, **kwargs)
@@ -320,7 +323,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 dict(event=event, result=result, last_result=last_result)
             )
 
-            matched_cb(**kwargs)
+            self.call_or_add_job(matched_cb, **kwargs)
 
         template = Template(value_template, self.hass)
         info = async_track_template_result(
@@ -343,7 +346,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         @callback
         @wraps(cb)
-        async def inner_cb(event):
+        def inner_cb(event):
             self.logger.debug("listen_state event: %s", event)
             kwargs = listen_kwargs.copy()
             kwargs.update(
@@ -354,7 +357,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 )
             )
 
-            await call_or_await(matched_cb, **kwargs)
+            self.call_or_add_job(matched_cb, **kwargs)
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)
@@ -369,7 +372,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                     old_state=None,
                 )
             )
-            matched_cb(**kwargs)
+            self.call_or_add_job(matched_cb, **kwargs)
 
         return handle
 
@@ -391,7 +394,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 )
             )
 
-            matched_cb(**kwargs)
+            self.call_or_add_job(matched_cb, **kwargs)
 
         handle = self.hass.bus.async_listen(event_type, inner_cb)
         self.listeners.append(handle)
@@ -447,6 +450,14 @@ class BoltedBase(metaclass=abc.ABCMeta):
         self.listeners.append(cancel_add_job)
 
         return cancel_add_job
+
+    def create_task(self, coro):
+        task = asyncio.create_task(coro)
+        def cancel_handler():
+            task.cancel()
+
+        self.listeners.append(cancel_handler)
+        return task
 
     def shutdown(self):
         while self.listeners:

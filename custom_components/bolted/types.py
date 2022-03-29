@@ -279,6 +279,43 @@ class BoltedBase(metaclass=abc.ABCMeta):
     def state_get(self, entity_id):
         return self.hass.states.get(entity_id)
 
+    def state_get_value(self, entity_id):
+        state = self.state_get(entity_id=entity_id)
+        if state is None:
+            return None
+        
+        return state.state
+    
+    def state_get_attr(self, entity_id, attr):
+        state = self.state_get(entity_id=entity_id)
+        if state is None:
+            return None
+        
+        if attr not in state.attributes:
+            return None
+        
+        return state.attributes[attr]
+
+    def state_is(self, entity_id, value):
+        r_value = self.state_get_value(entity_id=entity_id)
+        return r_value == value
+
+    def state_attr_is(self, entity_id, attr, value):
+        r_value = self.state_get_attr(entity_id=entity_id, attr=attr)
+        return r_value == value
+
+    def listen_template_or_state_value(self, entity_id_or_template, **kwargs):
+        if self.is_template(entity_id_or_template):
+            return self.listen_template(
+                value_template=entity_id_or_template,
+                **kwargs,
+            )
+        else:
+            return self.listen_state_value(
+                entity_id=entity_id_or_template,
+                **kwargs
+            )
+
     def service_register(self, service, cb, schema=None):
         self.hass.services.async_register(DOMAIN, service, cb)
         this_schema = None

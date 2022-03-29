@@ -536,6 +536,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                     entity_id=entity_id,
                     new_state=state,
                     old_state=None,
+                    event=None,
                 )
             )
             self.call_or_add_job(matched_cb, **kwargs)

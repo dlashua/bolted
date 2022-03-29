@@ -352,7 +352,11 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
             kwargs = listen_kwargs.copy()
             kwargs.update(
-                dict(event=event, result=result, last_result=last_result)
+                dict(
+                    event=event,
+                    result=result,
+                    last_result=last_result
+                )
             )
 
             self.call_or_add_job(matched_cb, **kwargs)
@@ -381,7 +385,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
     def listen_state_value(self, entity_id, cb, **orig_kwargs):
         matched_cb = match_sig(cb)
 
-        def inner_cb(new_state, old_state, **kwargs):
+        def inner_cb(entity_id, event, new_state, old_state, **kwargs):
             force_report = False
 
             result = None
@@ -403,6 +407,10 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 dict(
                     result=result,
                     last_result=last_result,
+                    event=event,
+                    entity_id=entity_id,
+                    new_state=new_state,
+                    old_state=old_state,
                 )
             )
 
@@ -417,7 +425,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
     def listen_state_attr(self, entity_id, attr, cb, **orig_kwargs):
         matched_cb = match_sig(cb)
 
-        def inner_cb(new_state, old_state, **kwargs):
+        def inner_cb(entity_id, event, new_state, old_state, **kwargs):
             force_report = False
 
             result = None
@@ -441,6 +449,11 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 dict(
                     result=result,
                     last_result=last_result,
+                    event=event,
+                    new_state=new_state,
+                    old_state=old_state,
+                    entity_id=entity_id,
+                    attr=attr,
                 )
             )
 
@@ -465,6 +478,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                     entity_id=event.data["entity_id"],
                     new_state=event.data["new_state"],
                     old_state=event.data["old_state"],
+                    event=event,
                 )
             )
 
@@ -507,6 +521,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 dict(
                     event_type=event.event_type,
                     event_data=event.data,
+                    event=event,
                 )
             )
 

@@ -53,11 +53,14 @@ def recursive_match(search, source):
 
 def match_sig(func):
     if asyncio.iscoroutinefunction(func):
+
         @wraps(func)
         async def inner_match_sig(**kwargs):
             kwargs_to_send = get_kwargs_for_match_sig(func, kwargs)
             return await func(**kwargs_to_send)
+
     else:
+
         @wraps(func)
         def inner_match_sig(**kwargs):
             kwargs_to_send = get_kwargs_for_match_sig(func, kwargs)
@@ -79,10 +82,15 @@ def get_kwargs_for_match_sig(func, kwargs):
             if key in kwargs:
                 kwargs_to_send[key] = kwargs.pop(key)
             else:
-                _LOGGER.warning("key '%s' not an available data parameter for %s", key, func)
+                _LOGGER.warning(
+                    "key '%s' not an available data parameter for %s",
+                    key,
+                    func,
+                )
                 kwargs_to_send[key] = None
-    
+
     return kwargs_to_send
+
 
 def make_cb_decorator(orig_func):
     def inner_cb_decorator(*args, **kwargs):
@@ -186,7 +194,9 @@ class BoltedBase(metaclass=abc.ABCMeta):
             if new_state.state == value:
                 _done.set()
 
-        _cancel_listen = self.listen_state(entity_id, cb=inner_cb, trigger_now=True)
+        _cancel_listen = self.listen_state(
+            entity_id, cb=inner_cb, trigger_now=True
+        )
         try:
             async with async_timeout.timeout(timeout):
                 await _done.wait()
@@ -202,7 +212,9 @@ class BoltedBase(metaclass=abc.ABCMeta):
         def inner_cb():
             _done.set()
 
-        _cancel_listen = self.listen_event(event_type, cb=inner_cb, filter=filter)
+        _cancel_listen = self.listen_event(
+            event_type, cb=inner_cb, filter=filter
+        )
         try:
             async with async_timeout.timeout(timeout):
                 await _done.wait()
@@ -283,17 +295,17 @@ class BoltedBase(metaclass=abc.ABCMeta):
         state = self.state_get(entity_id=entity_id)
         if state is None:
             return None
-        
+
         return state.state
-    
+
     def state_get_attr(self, entity_id, attr):
         state = self.state_get(entity_id=entity_id)
         if state is None:
             return None
-        
+
         if attr not in state.attributes:
             return None
-        
+
         return state.attributes[attr]
 
     def state_is(self, entity_id, value):
@@ -312,8 +324,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
             )
         else:
             return self.listen_state_value(
-                entity_id=entity_id_or_template,
-                **kwargs
+                entity_id=entity_id_or_template, **kwargs
             )
 
     def service_register(self, service, cb, schema=None):
@@ -389,11 +400,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
             kwargs = listen_kwargs.copy()
             kwargs.update(
-                dict(
-                    event=event,
-                    result=result,
-                    last_result=last_result
-                )
+                dict(event=event, result=result, last_result=last_result)
             )
 
             self.call_or_add_job(matched_cb, **kwargs)
@@ -430,7 +437,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                 result = new_state.state
             else:
                 force_report = True
-            
+
             last_result = None
             if old_state is not None:
                 last_result = old_state.state
@@ -453,11 +460,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
             self.call_or_add_job(matched_cb, **kwargs)
 
-        self.listen_state(
-            entity_id=entity_id,
-            cb=inner_cb,
-            **orig_kwargs
-        )
+        self.listen_state(entity_id=entity_id, cb=inner_cb, **orig_kwargs)
 
     def listen_state_attr(self, entity_id, attr, cb, **orig_kwargs):
         matched_cb = match_sig(cb)
@@ -471,7 +474,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
                     result = new_state.attributes[attr]
             else:
                 force_report = True
-            
+
             last_result = None
             if old_state is not None:
                 if attr in old_state.attributes:
@@ -496,11 +499,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
             self.call_or_add_job(matched_cb, **kwargs)
 
-        self.listen_state(
-            entity_id=entity_id,
-            cb=inner_cb,
-            **orig_kwargs
-        )     
+        self.listen_state(entity_id=entity_id, cb=inner_cb, **orig_kwargs)
 
     def listen_state(self, entity_id, cb, trigger_now=False, **listen_kwargs):
         matched_cb = match_sig(cb)
@@ -523,6 +522,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         handle = async_track_state_change_event(self.hass, entity_id, inner_cb)
         self.listeners.append(handle)
+
         def cancel_and_remove():
             if handle in self.listeners:
                 self.listeners.remove(handle)
@@ -566,6 +566,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         handle = self.hass.bus.async_listen(event_type, inner_cb)
         self.listeners.append(handle)
+
         def cancel_and_remove():
             if handle in self.listeners:
                 self.listeners.remove(handle)
@@ -625,6 +626,7 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
     def create_task(self, coro):
         task = asyncio.create_task(coro)
+
         def cancel_handler():
             task.cancel()
 

@@ -20,7 +20,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
 from homeassistant.requirements import async_process_requirements
 
-from .const import APP_DIR, DOMAIN, SCRIPT_DIR, CONFIG_DIR
+from .const import APP_DIR, CONFIG_DIR, DOMAIN, SCRIPT_DIR
 from .helpers import time_it
 from .types import BoltedApp, BoltedScript
 
@@ -70,8 +70,8 @@ class Manager:
         self.manifest_cache: Dict[str, BoltedManifest] = dict()
 
     async def shutdown(self):
-        _LOGGER.info('Shutting Down')
-        _LOGGER.info('Stopping All Apps')
+        _LOGGER.info("Shutting Down")
+        _LOGGER.info("Stopping All Apps")
         await self.stop_all()
         self._observer.stop()
 
@@ -96,7 +96,8 @@ class Manager:
             this_app = self.app_instances.pop(app_instance_name)
         except KeyError:
             _LOGGER.debug(
-                "Tried to Kill Bolt App %s but it was not loaded", app_instance_name
+                "Tried to Kill Bolt App %s but it was not loaded",
+                app_instance_name,
             )
         else:
             _LOGGER.info("Killing Bolt App %s", app_instance_name)
@@ -108,7 +109,8 @@ class Manager:
             this_script = self.script_instances.pop(script_instance_name)
         except KeyError:
             _LOGGER.debug(
-                "Tried to Kill Bolt Script %s but it was not loaded", script_instance_name
+                "Tried to Kill Bolt Script %s but it was not loaded",
+                script_instance_name,
             )
         else:
             _LOGGER.info("Killing Bolt Script %s", script_instance_name)
@@ -182,7 +184,6 @@ class Manager:
         for script in self.scripts:
             if script not in self.script_instances:
                 await self.start_script(self.scripts[script])
-
 
     async def reload_apps(self, bolted):
         try:
@@ -294,9 +295,8 @@ class Manager:
 
             for dir in dirs_to_remove:
                 dirnames.remove(dir)
-        
-        return available_bolts
 
+        return available_bolts
 
     async def start(self) -> bool:
         _LOGGER.debug("@start")
@@ -312,25 +312,30 @@ class Manager:
 
         if os.path.exists(APP_DIR):
             self._observer.schedule(
-                py_event_handler, self.hass.config.path(APP_DIR), recursive=True
+                py_event_handler,
+                self.hass.config.path(APP_DIR),
+                recursive=True,
             )
         else:
-            _LOGGER.warn('Apps Directory does not exist: %s', APP_DIR)
-        
+            _LOGGER.warn("Apps Directory does not exist: %s", APP_DIR)
+
         if os.path.exists(SCRIPT_DIR):
             self._observer.schedule(
-                py_event_handler, self.hass.config.path(SCRIPT_DIR), recursive=True
+                py_event_handler,
+                self.hass.config.path(SCRIPT_DIR),
+                recursive=True,
             )
         else:
-            _LOGGER.warn('Scripts Directory does not exist: %s', SCRIPT_DIR)
+            _LOGGER.warn("Scripts Directory does not exist: %s", SCRIPT_DIR)
 
         if os.path.exists(CONFIG_DIR):
             self._observer.schedule(
-                yaml_event_handler, self.hass.config.path(CONFIG_DIR), recursive=False
+                yaml_event_handler,
+                self.hass.config.path(CONFIG_DIR),
+                recursive=False,
             )
         else:
-            _LOGGER.warn('Config Directory does not exist: %s', CONFIG_DIR)
-
+            _LOGGER.warn("Config Directory does not exist: %s", CONFIG_DIR)
 
         self._observer.start()
         return True
@@ -392,13 +397,10 @@ class Manager:
                 "Created Bolt Script Instance %s: %s", script.name, this_obj
             )
             self.script_instances[script.name] = ScriptInstance(
-                name=script.name,
-                bolt=script,
-                instance=this_obj
+                name=script.name, bolt=script, instance=this_obj
             )
 
         return True
-
 
     async def start_app(self, app_instance_name, app_config):
         if "app" not in app_config:
@@ -462,9 +464,7 @@ class Manager:
         except AttributeError:
             _LOGGER.error("%s doesn't have an 'App' class", app_name)
         else:
-            _LOGGER.info(
-                "Created Bolt App Instance %s", app_instance_name
-            )
+            _LOGGER.info("Created Bolt App Instance %s", app_instance_name)
             self.app_instances[app_instance_name] = AppInstance(
                 name=app_instance_name,
                 bolt=this_app,

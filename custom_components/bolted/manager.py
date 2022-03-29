@@ -69,7 +69,7 @@ class Manager:
         self.script_instances: Dict[str, ScriptInstance] = dict()
         self.manifest_cache: Dict[str, BoltedManifest] = dict()
 
-    async def shutdown(self):
+    async def shutdown(self, event=None):
         _LOGGER.info("Shutting Down")
         _LOGGER.info("Stopping All Apps")
         await self.stop_all()

@@ -11,7 +11,6 @@ import sys
 from types import ModuleType
 from typing import Dict, List, Optional
 
-from attr import Attribute
 from pydantic import BaseModel
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
@@ -23,9 +22,9 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
 from homeassistant.requirements import async_process_requirements
 
-from .const import APP_DIR, CONFIG_DIR, DOMAIN, MODULE_DIR, SCRIPT_DIR
+from .const import APP_DIR, CONFIG_DIR, DOMAIN, MODULE_DIR
 from .helpers import time_it
-from .types import BoltedApp, BoltedScript
+from .types import BoltedApp
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 

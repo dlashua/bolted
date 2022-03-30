@@ -3,12 +3,15 @@ Manager for Bolted
 """
 import copy
 import datetime
+import importlib
 import importlib.util
 import logging
 import os
+import sys
 from types import ModuleType
 from typing import Dict, List, Optional
 
+from attr import Attribute
 from pydantic import BaseModel
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
@@ -20,7 +23,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.loader import async_get_integration
 from homeassistant.requirements import async_process_requirements
 
-from .const import APP_DIR, CONFIG_DIR, DOMAIN, SCRIPT_DIR
+from .const import APP_DIR, CONFIG_DIR, DOMAIN, MODULE_DIR, SCRIPT_DIR
 from .helpers import time_it
 from .types import BoltedApp, BoltedScript
 
@@ -37,6 +40,7 @@ class StrictBaseModel(BaseModel):
 class BoltedManifest(StrictBaseModel):
     requirements: Optional[List[str]] = None
     options: Optional[Dict] = None
+    deps: List[str] = []
 
 
 class BoltInfo(StrictBaseModel):
@@ -51,47 +55,34 @@ class AppInstance(StrictBaseModel):
     name: str
     bolt: BoltInfo
     instance: BoltedApp
+    deps: List[str] = []
     config: Dict = {}
-
-
-class ScriptInstance(StrictBaseModel):
-    name: str
-    bolt: BoltInfo
-    instance: BoltedScript
 
 
 class Manager:
     def __init__(self, hass: HomeAssistant):
         self.hass: HomeAssistant = hass
+        self.modules: Dict[str, BoltInfo] = dict()
         self.apps: Dict[str, BoltInfo] = dict()
         self.app_instances: Dict[str, AppInstance] = dict()
-        self.scripts: Dict[str, BoltInfo] = dict()
-        self.script_instances: Dict[str, ScriptInstance] = dict()
         self.manifest_cache: Dict[str, BoltedManifest] = dict()
 
-    async def shutdown(self, event=None):
+    def shutdown(self, event=None):
         _LOGGER.info("Shutting Down")
         _LOGGER.info("Stopping All Apps")
-        await self.stop_all()
+        self.stop_all()
         self._observer.stop()
 
-    async def stop_all(self):
+    def stop_all(self):
         _LOGGER.debug("Stopping All Objects")
         apps_to_stop = []
         for app_instance_name in self.app_instances:
             apps_to_stop.append(app_instance_name)
 
         for app_instance_name in apps_to_stop:
-            await self.stop_app(app_instance_name)
+            self.stop_app(app_instance_name)
 
-        scripts_to_stop = []
-        for script_instance_name in self.script_instances:
-            scripts_to_stop.append(script_instance_name)
-
-        for script_instance_name in scripts_to_stop:
-            await self.stop_script(script_instance_name)
-
-    async def stop_app(self, app_instance_name):
+    def stop_app(self, app_instance_name):
         try:
             this_app = self.app_instances.pop(app_instance_name)
         except KeyError:
@@ -104,19 +95,6 @@ class Manager:
             this_app.instance.shutdown()
             del this_app
 
-    async def stop_script(self, script_instance_name):
-        try:
-            this_script = self.script_instances.pop(script_instance_name)
-        except KeyError:
-            _LOGGER.debug(
-                "Tried to Kill Bolt Script %s but it was not loaded",
-                script_instance_name,
-            )
-        else:
-            _LOGGER.info("Killing Bolt Script %s", script_instance_name)
-            this_script.instance.shutdown()
-            del this_script
-
     def get_manifest(self, filename):
         if filename in self.manifest_cache:
             return self.manifest_cache[filename]
@@ -125,6 +103,8 @@ class Manager:
             with open(filename, "r") as stream:
                 data_loaded = yaml.safe_load(stream)
         except FileNotFoundError:
+            data_loaded = {}
+        if data_loaded is None:
             data_loaded = {}
         app_manifest = BoltedManifest(**data_loaded)
         self.manifest_cache[filename] = app_manifest
@@ -154,38 +134,73 @@ class Manager:
 
     async def reload(self):
         _LOGGER.debug("@reload")
+
+        self.manifest_cache.clear()
+        module_prefix = MODULE_DIR.replace("/", ".")
+        app_prefix = APP_DIR.replace("/", ".")
+
+        available_modules = self.get_available_bolts(MODULE_DIR)
+        changed_modules = self.get_missing_changed(
+            available_modules, self.modules
+        )
+
+        available_apps = self.get_available_bolts(APP_DIR)
+        changed_apps = self.get_missing_changed(available_apps, self.apps)
+
+        changed_app_instances = set()
+        for app_instance_name, app_instance in self.app_instances.items():
+            if app_instance.bolt.name in changed_apps:
+                changed_app_instances.add(app_instance_name)
+                continue
+
+            for dep in app_instance.deps + app_instance.bolt.manifest.deps:
+                if dep.startswith(app_prefix):
+                    if dep[(len(app_prefix) + 1) :] in changed_apps:
+                        changed_app_instances.add(app_instance_name)
+                        changed_apps.add(app_instance.bolt.name)
+                        continue
+
+                if dep.startswith(module_prefix):
+                    if dep[(len(module_prefix) + 1) :] in changed_modules:
+                        changed_app_instances.add(app_instance_name)
+                        changed_apps.add(app_instance.bolt.name)
+                        continue
+
+        for name in changed_modules:
+            _LOGGER.warning("Module Changed: %s", name)
+            full_name = f"{module_prefix}.{name}"
+            if full_name in sys.modules:
+                _LOGGER.warning("Refreshing Module: %s", full_name)
+                try:
+                    importlib.reload(sys.modules[full_name])
+                except:
+                    _LOGGER.warning("Could not reload %s", full_name)
+                del sys.modules[full_name]
+            if name in self.modules:
+                del self.modules[name]
+
+        for name, info in available_modules.items():
+            if name not in self.modules:
+                self.modules[name] = info
+
+        for name in changed_apps:
+            _LOGGER.warning("App Changed: %s", name)
+            full_name = f"{app_prefix}.{name}"
+            if full_name in sys.modules:
+                _LOGGER.warning("Refreshing Module: %s", full_name)
+                try:
+                    importlib.reload(sys.modules[full_name])
+                except:
+                    _LOGGER.warning("Could not reload %s", full_name)
+                del sys.modules[full_name]
+            if name in self.apps:
+                del self.apps[name]
+
+        for name, info in available_apps.items():
+            if name not in self.apps:
+                self.apps[name] = info
+
         bolted = await self.get_component_config()
-
-        await self.reload_apps(bolted)
-        await self.reload_scripts()
-
-    async def reload_scripts(self):
-        available_scripts = await self.get_available_bolts(SCRIPT_DIR)
-
-        scripts_to_remove = []
-        for script in self.scripts:
-            if script not in available_scripts:
-                _LOGGER.debug("Script No Longer Available: %s", script)
-                scripts_to_remove.append(script)
-                continue
-
-            if self.scripts[script].mtime != available_scripts[script].mtime:
-                _LOGGER.debug("Script Has Changed: %s", script)
-                scripts_to_remove.append(script)
-                continue
-
-        for script in scripts_to_remove:
-            await self.stop_script(script)
-            del self.scripts[script]
-
-        for script in available_scripts:
-            self.scripts[script] = available_scripts[script]
-
-        for script in self.scripts:
-            if script not in self.script_instances:
-                await self.start_script(self.scripts[script])
-
-    async def reload_apps(self, bolted):
         try:
             apps_config = bolted.get("apps", [])
         except AttributeError:
@@ -194,30 +209,8 @@ class Manager:
         if apps_config is None:
             apps_config = []
 
-        available_apps = await self.get_available_bolts(APP_DIR)
-
-        apps_to_remove = []
-        for app in self.apps:
-            if app not in available_apps:
-                _LOGGER.debug("App No Longer Available: %s", app)
-                apps_to_remove.append(app)
-                continue
-
-            if self.apps[app].mtime != available_apps[app].mtime:
-                _LOGGER.debug("App Has Changed: %s", app)
-                apps_to_remove.append(app)
-                continue
-
-        for app in apps_to_remove:
-            del self.apps[app]
-
-        for app in available_apps:
-            self.apps[app] = available_apps[app]
-
-        _LOGGER.debug("Available Apps %s", self.apps.keys())
-
-        apps_to_load = {}
-        seen = []
+        apps_to_load = []
+        seen = set()
         for app_config in apps_config:
             try:
                 app_name = app_config["app"]
@@ -235,42 +228,60 @@ class Manager:
                 )
                 continue
 
-            seen.append(app_instance_name)
+            seen.add(app_instance_name)
 
-            if app_name in apps_to_remove:
-                await self.stop_app(app_instance_name)
+            if app_instance_name in changed_app_instances:
+                apps_to_load.append(app_config)
+                continue
 
-            if app_instance_name in self.app_instances:
-                if app_config != self.app_instances[app_instance_name].config:
-                    await self.stop_app(app_instance_name)
-                else:
-                    continue
+            if app_instance_name not in self.app_instances:
+                apps_to_load.append(app_config)
+                continue
 
-            apps_to_load[app_instance_name] = app_config
+            if app_config != self.app_instances[app_instance_name].config:
+                changed_app_instances.add(app_instance_name)
+                apps_to_load.append(app_config)
+                continue
 
-        app_instances_to_remove = []
         for app_instance_name in self.app_instances:
             if app_instance_name not in seen:
-                app_instances_to_remove.append(app_instance_name)
+                changed_app_instances.add(app_instance_name)
 
-        for app_instance_name in app_instances_to_remove:
-            await self.stop_app(app_instance_name)
+        for app_instance_name in changed_app_instances:
+            self.stop_app(app_instance_name)
 
-        for app_instance_name in apps_to_load:
-            app_config = apps_to_load[app_instance_name]
-            await self.start_app(app_instance_name, app_config)
+        for app_config in apps_to_load:
+            await self.start_app(app_config)
 
-    async def get_available_bolts(self, dir):
-        self.manifest_cache.clear()
+    def get_missing_changed(
+        self, avail: Dict[str, BoltInfo], curr: Dict[str, BoltInfo]
+    ):
+        remove = set()
+        for name, bolt in curr.items():
+            if name not in avail:
+                remove.add(name)
+                continue
+
+            if bolt.mtime != avail[name].mtime:
+                remove.add(name)
+                continue
+
+            if bolt.manifest != avail[name].manifest:
+                remove.add(name)
+                continue
+
+        return remove
+
+    def get_available_bolts(self, dir):
         available_bolts: Dict[str, BoltInfo] = dict()
         bolt_path = self.hass.config.path(dir)
         for (dirpath, dirnames, filenames) in os.walk(bolt_path):
             _LOGGER.debug("walking %s", dirpath)
             if "__init__.py" in filenames:
-                this_app = self.get_bolt_info(
+                this_bolt = self.get_bolt_info(
                     dirpath, "__init__.py", bolt_path
                 )
-                available_bolts[this_app.name] = this_app
+                available_bolts[this_bolt.name] = this_bolt
                 dirnames.clear()
                 continue
 
@@ -278,10 +289,10 @@ class Manager:
                 if this_file[0] == "#":
                     continue
                 if this_file[-3:] == ".py":
-                    this_app = self.get_bolt_info(
+                    this_bolt = self.get_bolt_info(
                         dirpath, this_file, bolt_path
                     )
-                    available_bolts[this_app.name] = this_app
+                    available_bolts[this_bolt.name] = this_bolt
 
             dirs_to_remove = []
             bad_dirs = ["__pycache__"]
@@ -319,14 +330,14 @@ class Manager:
         else:
             _LOGGER.warn("Apps Directory does not exist: %s", APP_DIR)
 
-        if os.path.exists(SCRIPT_DIR):
+        if os.path.exists(MODULE_DIR):
             self._observer.schedule(
                 py_event_handler,
-                self.hass.config.path(SCRIPT_DIR),
+                self.hass.config.path(MODULE_DIR),
                 recursive=True,
             )
         else:
-            _LOGGER.warn("Scripts Directory does not exist: %s", SCRIPT_DIR)
+            _LOGGER.warn("Modules Directory does not exist: %s", MODULE_DIR)
 
         if os.path.exists(CONFIG_DIR):
             self._observer.schedule(
@@ -340,76 +351,22 @@ class Manager:
         self._observer.start()
         return True
 
-    async def start_script(self, script: BoltInfo):
-        if script.name not in self.scripts:
-            _LOGGER.error('script "%s" is not valid', script.name)
-            return None
-
-        if script.module is None:
-            if script.manifest.requirements is not None:
-                _LOGGER.debug(
-                    "Installing Requirements for %s: %s",
-                    script.name,
-                    script.manifest.requirements,
-                )
-                _time_requirements = time_it()
-                try:
-                    await async_process_requirements(
-                        self.hass,
-                        f"{DOMAIN}.{script.name}",
-                        script.manifest.requirements,
-                    )
-                except Exception as e:
-                    _LOGGER.error(
-                        "Exception loading requirements for %s", script.name
-                    )
-                    _LOGGER.exception(e)
-                    return None
-                _LOGGER.debug("Requirements took %s", _time_requirements())
-
-            this_module_spec = importlib.util.spec_from_file_location(
-                script.name, script.path
-            )
-
-            loading_module = importlib.util.module_from_spec(this_module_spec)
-            try:
-                this_module_spec.loader.exec_module(loading_module)
-            except Exception as e:
-                _LOGGER.error("Exception loading %s", script.name)
-                _LOGGER.exception(e)
-                return None
-            script.module = loading_module
-            _LOGGER.debug("Loaded Module %s", script.name)
-            _LOGGER.debug("MANIFEST %s %s", script.name, script.manifest)
-
-        options = {}
-        if script.manifest.options is not None:
-            options = script.manifest.options
-
-        try:
-            this_obj = script.module.Script(
-                self.hass, script.name, {}, **options
-            )
-        except AttributeError:
-            _LOGGER.error("%s doesn't have an 'Script' class", script.name)
-        else:
-            _LOGGER.debug(
-                "Created Bolt Script Instance %s: %s", script.name, this_obj
-            )
-            self.script_instances[script.name] = ScriptInstance(
-                name=script.name, bolt=script, instance=this_obj
-            )
-
-        return True
-
-    async def start_app(self, app_instance_name, app_config):
+    async def start_app(self, app_config):
         if "app" not in app_config:
             return None
 
+        app_instance_name = app_config["name"]
         app_name = app_config["app"]
 
         if app_name not in self.apps:
             _LOGGER.error('app "%s" is not valid', app_name)
+            return None
+
+        if app_instance_name in self.app_instances:
+            _LOGGER.error(
+                "attempting to start and already started app: %s",
+                app_instance_name,
+            )
             return None
 
         this_app = self.apps[app_name]
@@ -437,7 +394,7 @@ class Manager:
                 _LOGGER.debug("Requirements took %s", _time_requirements())
 
             this_module_spec = importlib.util.spec_from_file_location(
-                app_name, this_app.path
+                f"bolted.apps.{app_name}", this_app.path
             )
 
             loading_module = importlib.util.module_from_spec(this_module_spec)
@@ -458,18 +415,62 @@ class Manager:
         app_config_copy.pop("app")
         app_config_copy.pop("name")
         try:
-            this_obj = this_app.module.App(
+            this_obj_class = this_app.module.App
+        except AttributeError:
+            _LOGGER.error("%s doesn't have an 'App' class", app_name)
+            return False
+
+        try:
+            deps = getattr(this_obj_class, "DEPS")
+        except AttributeError:
+            deps = []
+
+        try:
+            reqs = getattr(this_obj_class, "REQS")
+        except AttributeError:
+            reqs = None
+
+        if reqs is not None:
+            _LOGGER.info(
+                "Installing Class Requirements for %s: %s",
+                app_name,
+                reqs,
+            )
+            _time_requirements = time_it()
+            try:
+                await async_process_requirements(
+                    self.hass,
+                    f"{DOMAIN}.{app_name}",
+                    reqs,
+                )
+            except Exception as e:
+                _LOGGER.error(
+                    "Exception loading requirements for %s", app_name
+                )
+                _LOGGER.exception(e)
+                return None
+            _LOGGER.debug("Requirements took %s", _time_requirements())
+
+        try:
+            this_obj = this_obj_class(
                 self.hass, app_instance_name, app_config_copy, **options
             )
         except AttributeError:
-            _LOGGER.error("%s doesn't have an 'App' class", app_name)
+            _LOGGER.error(
+                "Unable to Instantiate App %s %s", app_name, app_instance_name
+            )
+            return False
         else:
-            _LOGGER.info("Created Bolt App Instance %s", app_instance_name)
             self.app_instances[app_instance_name] = AppInstance(
                 name=app_instance_name,
                 bolt=this_app,
                 instance=this_obj,
                 config=app_config,
+                deps=deps,
+            )
+            _LOGGER.info(
+                "Created Bolt App Instance %s",
+                self.app_instances[app_instance_name],
             )
 
         return True

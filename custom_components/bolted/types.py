@@ -31,7 +31,16 @@ from .const import DOMAIN
 from .entity_manager import EntityManager
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
-
+VALID_LOG_LEVELS = [
+    'critical',
+    'fatal',
+    'error',
+    'warning',
+    'warn',
+    'info',
+    'debug',
+    'notset',
+]
 
 def recursive_match(search, source):
     if isinstance(search, dict):
@@ -123,12 +132,18 @@ class BoltedBase(metaclass=abc.ABCMeta):
             f".{self.__module__}.{self.name}"
         )
 
+        log_level = 'info'
         if "log_level" in self.config:
-            self.call_service(
-                "logger",
-                "set_level",
-                **{self._logging_name: self.config.pop("log_level")},
-            )
+            log_level = self.config.pop('log_level')
+            if log_level not in VALID_LOG_LEVELS:
+                self.logger.warn('Log Level not Valid: %s', log_level)
+                log_level = 'info'
+
+        self.call_service(
+            "logger",
+            "set_level",
+            **{self._logging_name: log_level},
+        )
 
         self.logger = logging.getLogger(self._logging_name)
         self.listeners = []

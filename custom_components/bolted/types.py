@@ -127,9 +127,9 @@ class BoltedBase(metaclass=abc.ABCMeta):
         self.name = name
         self.config = config
         self._logging_name = (
-            f"{__package__}"
-            f".{self._get_logger_name()}"
-            f".{self.__module__}.{self.name}"
+            # f"{__package__}."
+            # f"{self._get_logger_name()}."
+            f"{self.__module__}.{self.name}"
         )
 
         log_level = 'info'
@@ -608,6 +608,11 @@ class BoltedBase(metaclass=abc.ABCMeta):
             fut = pendulum.parse(time, tz=now.tz)
         elif isinstance(time, datetime.time):
             fut = pendulum.parse(str(time), tz=now.tz)
+        elif isinstance(time, datetime.datetime):
+            fut = pendulum.parse(str(time.strftime("%H:%M:%S")), tz=now.tz)
+        else:
+            raise Exception(f'Unrecognized Time {time}')
+        
 
         seconds = (fut - now).in_seconds()
 

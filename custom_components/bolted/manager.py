@@ -429,6 +429,13 @@ class Manager:
         except AttributeError:
             reqs = None
 
+        try:
+            class_options = getattr(this_obj_class, "OPTIONS")
+        except AttributeError:
+            class_options = {}
+
+        options.update(class_options)
+
         if reqs is not None:
             _LOGGER.info(
                 "Installing Class Requirements for %s: %s",

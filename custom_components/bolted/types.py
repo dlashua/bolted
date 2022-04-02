@@ -303,6 +303,9 @@ class BoltedBase(metaclass=abc.ABCMeta):
 
         await call_or_await(self.startup)
 
+    async def sleep(self, secs):
+        return await asyncio.sleep(secs)
+
     def state_get(self, entity_id):
         return self.hass.states.get(entity_id)
 

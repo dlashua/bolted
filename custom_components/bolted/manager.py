@@ -54,7 +54,6 @@ class AppInstance(StrictBaseModel):
     name: str
     bolt: BoltInfo
     instance: BoltedApp
-    deps: List[str] = []
     config: Dict = {}
 
 
@@ -114,8 +113,10 @@ class Manager:
         appdir = dirpath[len(root_path) + 1 :]
         if filename == "__init__.py":
             appname = appdir
+            manifest_file = dirpath + '/manifest.yamml'
         else:
             appname = filename[0:-3]
+            manifest_file = dirpath + '/' + appname + '.yaml'
             if len(appdir) != 0:
                 appname = appdir + "/" + appname
         appname = appname.replace("/", ".")
@@ -124,11 +125,12 @@ class Manager:
             appname,
             apppath,
         )
+        _LOGGER.debug('Manifest for %s at %s', appname, manifest_file)
         return BoltInfo(
             name=appname,
             path=apppath,
             mtime=os.path.getmtime(apppath),
-            manifest=self.get_manifest(dirpath + "/manifest.yaml"),
+            manifest=self.get_manifest(manifest_file),
         )
 
     async def reload(self):
@@ -152,7 +154,7 @@ class Manager:
                 changed_app_instances.add(app_instance_name)
                 continue
 
-            for dep in app_instance.deps + app_instance.bolt.manifest.deps:
+            for dep in app_instance.bolt.manifest.deps:
                 if dep.startswith(app_prefix):
                     if dep[(len(app_prefix) + 1) :] in changed_apps:
                         changed_app_instances.add(app_instance_name)
@@ -318,11 +320,12 @@ class Manager:
 
         yaml_event_handler = EventHandler(["*.yaml"], reload_action)
         py_event_handler = EventHandler(["*.py"], reload_action)
+        both_event_handler = EventHandler(["*.py", "*.yaml"], reload_action)
         self._observer = Observer()
 
         if os.path.exists(APP_DIR):
             self._observer.schedule(
-                py_event_handler,
+                both_event_handler,
                 self.hass.config.path(APP_DIR),
                 recursive=True,
             )
@@ -420,44 +423,6 @@ class Manager:
             return False
 
         try:
-            deps = getattr(this_obj_class, "DEPS")
-        except AttributeError:
-            deps = []
-
-        try:
-            reqs = getattr(this_obj_class, "REQS")
-        except AttributeError:
-            reqs = None
-
-        try:
-            class_options = getattr(this_obj_class, "OPTIONS")
-        except AttributeError:
-            class_options = {}
-
-        options.update(class_options)
-
-        if reqs is not None:
-            _LOGGER.info(
-                "Installing Class Requirements for %s: %s",
-                app_name,
-                reqs,
-            )
-            _time_requirements = time_it()
-            try:
-                await async_process_requirements(
-                    self.hass,
-                    f"{DOMAIN}.{app_name}",
-                    reqs,
-                )
-            except Exception as e:
-                _LOGGER.error(
-                    "Exception loading requirements for %s", app_name
-                )
-                _LOGGER.exception(e)
-                return None
-            _LOGGER.debug("Requirements took %s", _time_requirements())
-
-        try:
             this_obj = this_obj_class(
                 self.hass, app_instance_name, app_config_copy, **options
             )
@@ -472,7 +437,6 @@ class Manager:
                 bolt=this_app,
                 instance=this_obj,
                 config=app_config,
-                deps=deps,
             )
             _LOGGER.info(
                 "Created Bolt App Instance %s",

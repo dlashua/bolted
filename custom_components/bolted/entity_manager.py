@@ -65,7 +65,7 @@ class EntityManager:
         new_entity = cls.platform_classes[platform](
             cls.hass, bolted, unique_id, restore=restore
         )
-        new_entity.entity_id = f"{platform}.{bolted.name}"
+        new_entity.entity_id = f"{platform}.{bolted.name}_{name}"
         cls.platform_adders[platform]([new_entity])
         await new_entity.wait_for_added()
         cls.registered_entities[platform][unique_id] = new_entity

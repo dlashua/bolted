@@ -83,6 +83,20 @@ In place of actual documentation until the API stabilizes, this should help get 
 
 Look at the `BoltedBase Class <https://github.com/dlashua/bolted/blob/main/custom_components/bolted/types.py#L122>`_ to see what methods are available to you inside your apps.
 
+Feature Roadmap
+***************
+
+1. Script Sequence Support
+    * Single Bolted Method supporting Full Home Assistant YAML Script Syntax
+2. Home Assistant Device Support
+    * Create Devices with Multiple Entities 
+3. Integration Support 
+    * Let specific **Bolted** apps run under a different domain
+4. Export as Custom Component
+    * Command to export an app as a separate, fully functional custom-component
+5. Config Flow support for Bolted Setup and App Configuration
+
+
 But this already exists!
 ************************
 

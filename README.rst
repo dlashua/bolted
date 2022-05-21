@@ -6,7 +6,7 @@ Under Development
 
 Bolted is still under heavy development and should be considered *alpha* code. Features may be broken, documentation may be inaccurate, and there is no guarantee that the API won't change from commit to commit.
 
-Bug Reports, Feature Requests, and Pull Requests are high encouraged.
+Bug Reports, Feature Requests, and Pull Requests are highly encouraged.
 
 What is Bolted?
 ***************

@@ -51,9 +51,9 @@ In place of actual documentation until the API stabilizes, this should help get 
 
         bolted: !include bolted/config/config.yaml
 
-4. Create an Empty File at ``bolted/config/config.yaml``
+4. Create an Empty File at ``CONFIG_DIR/bolted/config/config.yaml``
 5. Restart Home Assistant
-6. Create Python Code in a ``whateveryouwant.py`` file in the ``apps`` directory like this:
+6. Create Python Code in a ``whateveryouwant.py`` file in the ``CONFIG_DIR/bolted/apps`` directory like this:
 
     .. code:: python
 
@@ -64,7 +64,7 @@ In place of actual documentation until the API stabilizes, this should help get 
                 self.logger.info(self.config)
             
 7. The Class Name must be ``App``. The ``startup`` method will be called automatically by **Bolted** to start your app.
-8. Register an Instance of this App in ``bolted\config\config.yaml``:
+8. Register an Instance of this App in ``CONFIG_DIR/bolted/config/config.yaml``:
 
     .. code:: yaml
 
